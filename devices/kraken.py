@@ -32,6 +32,8 @@ class KrakenElite(Device):
         self.media = []
         self.media_index = 0
         self.next_frame = 0.0
+        self.overlay = None
+        self.overlay_time = 0.0
 
         with self.lock:
             self.dev.drain()
@@ -161,16 +163,31 @@ class KrakenElite(Device):
             zoom = float(settings.get("zoom", 1.0))
             dx = float(settings.get("offset_x", 0.0))
             dy = float(settings.get("offset_y", 0.0))
-            key = (settings["image"], rotation, fmt, zoom, dx, dy)
+            overlay = bool(settings.get("overlay_sensors"))
+            key = (settings["image"], rotation, fmt, zoom, dx, dy, overlay)
             if key != self.media_key:
-                self.media = lcd.load_media(settings["image"], self.size, rotation, fmt, zoom, dx, dy)
+                if overlay:
+                    self.media = lcd.load_frames(settings["image"], self.size, zoom, dx, dy)
+                else:
+                    self.media = lcd.load_media(settings["image"], self.size, rotation, fmt, zoom, dx, dy)
                 self.media_key = key
                 self.media_index = 0
-            data, duration = self.media[self.media_index % len(self.media)]
-            if len(self.media) == 1:
-                duration = 2.0
+                self.overlay_time = 0.0
+            frame, duration = self.media[self.media_index % len(self.media)]
             self.media_index += 1
-            self.wait_and_push(data, fmt, duration)
+            if overlay:
+                if time.time() - self.overlay_time > 1.0:
+                    sensors = engine.sensors
+                    self.overlay = lcd.sensor_overlay(self.size, self.status.get("liquid"), sensors.cpu_temp,
+                                                      sensors.cpu_load, settings.get("accent", "#00a2ff"),
+                                                      settings.get("overlay_position", "bottom"))
+                    self.overlay_time = time.time()
+                frame = lcd.encode(lcd.compose(frame, self.overlay, rotation), fmt)
+                if len(self.media) == 1:
+                    duration = 1.0
+            elif len(self.media) == 1:
+                duration = 2.0
+            self.wait_and_push(frame, fmt, duration)
             return
 
         sensors = engine.sensors

@@ -26,7 +26,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.15"
+VERSION = "1.16"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -345,11 +345,24 @@ class App:
         ttk.Label(tab, text=T("Blijft het scherm zwart? Probeer rgb565."), foreground=theme.MUTED).grid(
             row=8, column=1, columnspan=2, sticky="w")
 
+        overlay_row = ttk.Frame(tab)
+        overlay_row.grid(row=9, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        self.overlay_var = tk.BooleanVar(value=lcd.get("overlay_sensors", False))
+        ttk.Checkbutton(overlay_row, text=T("Sensoren over afbeelding/GIF tonen"), variable=self.overlay_var,
+                        command=self.apply_lcd).pack(side="left")
+        positions = {"bottom": T("Onder"), "top": T("Boven")}
+        self.overlay_position = tk.StringVar(value=positions.get(lcd.get("overlay_position", "bottom")))
+        position_box = ttk.Combobox(overlay_row, textvariable=self.overlay_position, values=list(positions.values()),
+                                    state="readonly", width=7)
+        position_box.pack(side="left", padx=8)
+        position_box.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
+        self.overlay_positions = positions
+
         self.cpu_label = ttk.Label(tab, foreground=theme.MUTED, wraplength=430, justify="left")
-        self.cpu_label.grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
+        self.cpu_label.grid(row=10, column=0, columnspan=3, sticky="w", pady=(12, 0))
 
         side = ttk.Frame(tab, padding=(20, 0, 0, 0))
-        side.grid(row=0, column=3, rowspan=10, sticky="n")
+        side.grid(row=0, column=3, rowspan=11, sticky="n")
         self.preview = tk.Canvas(side, width=PREVIEW, height=PREVIEW, highlightthickness=0, bg="#0b0d10",
                                  cursor="fleur")
         self.preview.pack()
@@ -389,6 +402,10 @@ class App:
         frame = self.preview_frame()
         if mode == "image" and frame is not None:
             image = lcd_render.fit(frame, PREVIEW, rotation, self.zoom_var.get(), self.offset_x, self.offset_y)
+            if self.overlay_var.get():
+                overlay = lcd_render.sensor_overlay(PREVIEW, 31.4, self.sensors.cpu_temp, self.sensors.cpu_load,
+                                                    self.accent.value, self.overlay_position_code())
+                image = lcd_render.compose(image, overlay, 0)
         elif mode == "sensors":
             image = lcd_render.sensor_frame(PREVIEW, rotation, 31.4, self.sensors.cpu_temp,
                                             self.sensors.cpu_load, self.accent.value)
@@ -793,6 +810,9 @@ class App:
             self.lcd_mode.set("image")
             self.apply_lcd()
 
+    def overlay_position_code(self):
+        return next((k for k, v in self.overlay_positions.items() if v == self.overlay_position.get()), "bottom")
+
     def apply_lcd(self):
         lcd = self.config["lcd"]
         lcd["mode"] = self.lcd_mode.get()
@@ -804,6 +824,8 @@ class App:
         lcd["zoom"] = round(self.zoom_var.get(), 3)
         lcd["offset_x"] = round(self.offset_x, 3)
         lcd["offset_y"] = round(self.offset_y, 3)
+        lcd["overlay_sensors"] = self.overlay_var.get()
+        lcd["overlay_position"] = self.overlay_position_code()
         self.save()
         self.draw_preview()
 
@@ -857,6 +879,8 @@ class App:
         self.zoom_var.set(lcd.get("zoom", 1.0))
         self.offset_x = lcd.get("offset_x", 0.0)
         self.offset_y = lcd.get("offset_y", 0.0)
+        self.overlay_var.set(lcd.get("overlay_sensors", False))
+        self.overlay_position.set(self.overlay_positions.get(lcd.get("overlay_position", "bottom")))
         self.draw_preview()
         self.load_selection()
 

@@ -25,6 +25,8 @@ DEFAULTS = {
         "zoom": 1.0,
         "offset_x": 0.0,
         "offset_y": 0.0,
+        "overlay_sensors": False,
+        "overlay_position": "bottom",
     },
     "lianli_fans_per_channel": [4, 4, 4, 4],
     "nzxt_leds_per_channel": [40, 40, 40],

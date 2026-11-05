@@ -125,3 +125,54 @@ def sensor_frame(size, rotation, liquid, cpu_temp, cpu_load, accent):
     if rotation:
         image = image.rotate(-rotation)
     return image
+
+
+def load_frames(path, size, zoom=1.0, dx=0.0, dy=0.0):
+    source = Image.open(path)
+    frames = []
+    for frame in ImageSequence.Iterator(source):
+        duration = frame.info.get("duration", source.info.get("duration", 100)) or 100
+        frames.append((fit(frame, size, 0, zoom, dx, dy), max(20, duration) / 1000))
+    return frames
+
+
+def sensor_overlay(size, liquid, cpu_temp, cpu_load, accent, position="bottom"):
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    accent = hex_to_rgb(accent)
+
+    parts = [f"{liquid:.1f}°" if liquid is not None else "--"]
+    cpu = []
+    if cpu_temp is not None:
+        cpu.append(f"{cpu_temp:.0f}°")
+    if cpu_load is not None:
+        cpu.append(f"{cpu_load:.0f}%")
+
+    big = font(int(size * 0.085), True)
+    small = font(int(size * 0.055))
+    label = font(int(size * 0.035), True)
+    width = size * 0.56
+    height = size * 0.17
+    left = (size - width) / 2
+    top = size * 0.12 if position == "top" else size * 0.71
+    draw.rounded_rectangle([left, top, left + width, top + height], radius=height / 2, fill=(8, 10, 14, 175))
+
+    center = size / 2
+    if cpu:
+        liquid_x = center - width * 0.2
+        cpu_x = center + width * 0.2
+        draw.line([center, top + height * 0.22, center, top + height * 0.78], fill=(255, 255, 255, 60),
+                  width=max(1, size // 320))
+        draw.text((cpu_x, top + height * 0.3), "CPU", font=label, fill=accent + (255,), anchor="mm")
+        draw.text((cpu_x, top + height * 0.66), "  ".join(cpu), font=small, fill=(235, 238, 242, 255), anchor="mm")
+    else:
+        liquid_x = center
+    draw.text((liquid_x, top + height * 0.3), t("VLOEISTOF"), font=label, fill=accent + (255,), anchor="mm")
+    draw.text((liquid_x, top + height * 0.66), parts[0], font=small if cpu else big,
+              fill=(245, 247, 250, 255), anchor="mm")
+    return overlay
+
+
+def compose(frame, overlay, rotation):
+    image = Image.alpha_composite(frame.convert("RGBA"), overlay).convert("RGB")
+    return image.rotate(-rotation) if rotation else image
