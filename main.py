@@ -1,6 +1,7 @@
 import ctypes
 import logging
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -26,7 +27,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.16"
+VERSION = "1.17"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -128,15 +129,47 @@ def value_slider(parent, var, start, end, text, command, length=200):
     return frame
 
 
-class ColorButton(tk.Button):
+HEX = re.compile(r"^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$")
+
+
+def parse_hex(text):
+    match = HEX.match(text.strip())
+    if not match:
+        return None
+    digits = match.group(1)
+    if len(digits) == 3:
+        digits = "".join(c * 2 for c in digits)
+    return "#" + digits.lower()
+
+
+class ColorButton(ttk.Frame):
     def __init__(self, parent, on_change):
-        super().__init__(parent, width=6, relief="groove", command=self.pick)
+        super().__init__(parent)
         self.on_change = on_change
         self.value = "#ffffff"
+        self.swatch = tk.Button(self, width=4, relief="groove", command=self.pick)
+        self.swatch.pack(side="left")
+        self.text = tk.StringVar()
+        self.entry = ttk.Entry(self, textvariable=self.text, width=8)
+        self.entry.pack(side="left", padx=(4, 8))
+        self.entry.bind("<Return>", self.typed)
+        self.entry.bind("<FocusOut>", self.typed)
 
     def set(self, value):
         self.value = value
-        self.configure(bg=value, activebackground=value)
+        self.swatch.configure(bg=value, activebackground=value)
+        self.text.set(value.upper())
+
+    def typed(self, event=None):
+        value = parse_hex(self.text.get())
+        if value is None:
+            self.text.set(self.value.upper())
+            return
+        if value != self.value:
+            self.set(value)
+            self.on_change()
+        else:
+            self.text.set(value.upper())
 
     def pick(self):
         result = colorchooser.askcolor(self.value, parent=self)
