@@ -20,6 +20,7 @@ MODES = {
 class NzxtRgbFanController(Device):
     key = "nzxt_rgb_fan"
     name = "NZXT RGB & Fan Controller"
+    refresh_seconds = 60.0
 
     def __init__(self, info, leds_per_channel):
         super().__init__()
