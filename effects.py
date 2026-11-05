@@ -21,6 +21,27 @@ def hue(h):
     return r * 255, g * 255, b * 255
 
 
+def saturate(color, saturation):
+    gray = 0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]
+    return tuple(gray + (c - gray) * saturation for c in color)
+
+
+def saturate_hex(value, saturation):
+    r, g, b = saturate(hex_to_rgb(value), saturation)
+    return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+def with_saturation(effect):
+    saturation = effect.get("saturation", 100) / 100
+    if saturation >= 1:
+        return effect
+    effect = dict(effect)
+    for key in ("color1", "color2"):
+        if key in effect:
+            effect[key] = saturate_hex(effect[key], saturation)
+    return effect
+
+
 def mix(a, b, amount):
     return tuple(x + (y - x) * amount for x, y in zip(a, b))
 
@@ -45,6 +66,10 @@ def render(effect, positions, t, brightness):
     else:
         colors = [mix(color1, color2, 0.5 + 0.5 * math.sin((x - t * speed * 0.2) * math.tau))
                   for x in positions]
+
+    saturation = effect.get("saturation", 100) / 100
+    if saturation < 1:
+        colors = [saturate(c, saturation) for c in colors]
 
     scale = brightness / 100
     return [(int(r * scale), int(g * scale), int(b * scale)) for r, g, b in colors]

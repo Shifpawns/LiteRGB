@@ -71,7 +71,7 @@ class Engine:
         results = []
         brightness = self.config.get("brightness", 100) if self.config.get("lights_on", True) else 0
         for key, device in list(self.devices.items()):
-            effect = self.effect_for(key)
+            effect = effects.with_saturation(self.effect_for(key))
             try:
                 result = device.save_to_device(effect, device.last_colors or [], brightness)
             except Exception as error:
@@ -91,7 +91,7 @@ class Engine:
         if now - device.pending_since < 1.0:
             return
         try:
-            if device.apply_effect(self.effect_for(key), brightness) is False:
+            if device.apply_effect(effects.with_saturation(self.effect_for(key)), brightness) is False:
                 device.pending_since = now + 9.0
                 return
             device.applied = wanted

@@ -158,9 +158,12 @@ class KrakenElite(Device):
             return
 
         if mode == "image" and settings.get("image") and os.path.exists(settings["image"]):
-            key = (settings["image"], rotation, fmt)
+            zoom = float(settings.get("zoom", 1.0))
+            dx = float(settings.get("offset_x", 0.0))
+            dy = float(settings.get("offset_y", 0.0))
+            key = (settings["image"], rotation, fmt, zoom, dx, dy)
             if key != self.media_key:
-                self.media = lcd.load_media(settings["image"], self.size, rotation, fmt)
+                self.media = lcd.load_media(settings["image"], self.size, rotation, fmt, zoom, dx, dy)
                 self.media_key = key
                 self.media_index = 0
             data, duration = self.media[self.media_index % len(self.media)]

@@ -9,16 +9,20 @@ import time
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
+from PIL import Image, ImageDraw, ImageTk
+
 import psutil
 
 import config as cfg
+import lcd as lcd_render
 import updater
 import effects
 from engine import Engine
 from sensors import Sensors
 
 APP = "LiteRGB"
-VERSION = "1.10"
+PREVIEW = 220
+VERSION = "1.11"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -130,8 +134,8 @@ class App:
             self.root.iconbitmap(asset("icon.ico"))
         except tk.TclError:
             pass
-        self.root.geometry("640x460")
-        self.root.minsize(600, 420)
+        self.root.geometry("860x520")
+        self.root.minsize(820, 500)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
 
         notebook = ttk.Notebook(self.root)
@@ -207,19 +211,24 @@ class App:
         ttk.Scale(right, from_=0.1, to=4.0, variable=self.speed_var, length=200,
                   command=lambda v: self.apply_effect()).grid(row=5, column=1, columnspan=2, sticky="w")
 
-        ttk.Separator(right).grid(row=6, column=0, columnspan=3, sticky="ew", pady=12)
+        ttk.Label(right, text="Verzadiging").grid(row=6, column=0, sticky="w", pady=4)
+        self.saturation_var = tk.IntVar(value=100)
+        ttk.Scale(right, from_=0, to=100, variable=self.saturation_var, length=200,
+                  command=lambda v: self.apply_effect()).grid(row=6, column=1, columnspan=2, sticky="w")
 
-        ttk.Label(right, text="Helderheid (alles)").grid(row=7, column=0, sticky="w")
+        ttk.Separator(right).grid(row=7, column=0, columnspan=3, sticky="ew", pady=12)
+
+        ttk.Label(right, text="Helderheid (alles)").grid(row=8, column=0, sticky="w")
         self.brightness_var = tk.IntVar(value=self.config["brightness"])
         ttk.Scale(right, from_=0, to=100, variable=self.brightness_var, length=200,
-                  command=lambda v: self.apply_brightness()).grid(row=7, column=1, columnspan=2, sticky="w")
+                  command=lambda v: self.apply_brightness()).grid(row=8, column=1, columnspan=2, sticky="w")
 
         self.lights_var = tk.BooleanVar(value=self.config["lights_on"])
         ttk.Checkbutton(right, text="Verlichting aan", variable=self.lights_var,
-                        command=self.apply_brightness).grid(row=8, column=0, columnspan=3, sticky="w", pady=8)
+                        command=self.apply_brightness).grid(row=9, column=0, columnspan=3, sticky="w", pady=8)
 
         self.save_button = ttk.Button(right, text="Opslaan in apparaten", command=self.save_to_devices)
-        self.save_button.grid(row=9, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self.save_button.grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def build_lcd(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
@@ -235,7 +244,7 @@ class App:
 
         ttk.Label(tab, text="Bestand").grid(row=3, column=0, sticky="w", pady=(12, 4))
         self.image_var = tk.StringVar(value=lcd["image"])
-        ttk.Entry(tab, textvariable=self.image_var, width=42, state="readonly").grid(row=3, column=1, sticky="w")
+        ttk.Entry(tab, textvariable=self.image_var, width=26, state="readonly").grid(row=3, column=1, sticky="w")
         ttk.Button(tab, text="Kies...", command=self.pick_image).grid(row=3, column=2, padx=6)
 
         ttk.Label(tab, text="Helderheid").grid(row=4, column=0, sticky="w", pady=4)
@@ -267,6 +276,89 @@ class App:
         cpu_note = "CPU-temperatuur: actief" if self.sensors.computer else \
             "CPU-temperatuur: niet beschikbaar (zie README)"
         ttk.Label(tab, text=cpu_note, foreground="#777").grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
+
+        side = ttk.Frame(tab, padding=(20, 0, 0, 0))
+        side.grid(row=0, column=3, rowspan=10, sticky="n")
+        self.preview = tk.Canvas(side, width=PREVIEW, height=PREVIEW, highlightthickness=0, bg="#0b0d10",
+                                 cursor="fleur")
+        self.preview.pack()
+        self.preview.bind("<ButtonPress-1>", self.preview_press)
+        self.preview.bind("<B1-Motion>", self.preview_drag)
+        self.preview.bind("<ButtonRelease-1>", lambda e: self.apply_lcd())
+        self.preview.bind("<MouseWheel>", self.preview_wheel)
+        self.preview.bind("<Button-4>", lambda e: self.preview_wheel(e, 1))
+        self.preview.bind("<Button-5>", lambda e: self.preview_wheel(e, -1))
+        ttk.Label(side, text="Sleep om te verschuiven,\nscroll om te zoomen", justify="center", foreground="#777").pack(pady=(6, 4))
+        zoom_row = ttk.Frame(side)
+        zoom_row.pack()
+        ttk.Label(zoom_row, text="Zoom").pack(side="left")
+        self.zoom_var = tk.DoubleVar(value=lcd.get("zoom", 1.0))
+        ttk.Scale(zoom_row, from_=0.3, to=4.0, variable=self.zoom_var, length=150,
+                  command=lambda v: self.preview_changed()).pack(side="left", padx=6)
+        ttk.Button(side, text="Reset", command=self.reset_view).pack(pady=6)
+        self.offset_x = lcd.get("offset_x", 0.0)
+        self.offset_y = lcd.get("offset_y", 0.0)
+        self.preview_source = (None, None)
+        self.preview_photo = None
+        self.preview_job = None
+        self.draw_preview()
+
+    def preview_frame(self):
+        path = self.image_var.get()
+        if self.preview_source[0] != path:
+            try:
+                self.preview_source = (path, Image.open(path).convert("RGB") if path else None)
+            except OSError:
+                self.preview_source = (path, None)
+        return self.preview_source[1]
+
+    def draw_preview(self):
+        rotation = int(self.rotation_var.get())
+        mode = self.lcd_mode.get()
+        frame = self.preview_frame()
+        if mode == "image" and frame is not None:
+            image = lcd_render.fit(frame, PREVIEW, rotation, self.zoom_var.get(), self.offset_x, self.offset_y)
+        elif mode == "sensors":
+            image = lcd_render.sensor_frame(PREVIEW, rotation, 31.4, self.sensors.cpu_temp,
+                                            self.sensors.cpu_load, self.accent.value)
+        else:
+            image = Image.new("RGB", (PREVIEW, PREVIEW), (11, 13, 16))
+        mask = Image.new("L", (PREVIEW, PREVIEW), 70)
+        ImageDraw.Draw(mask).ellipse([0, 0, PREVIEW - 1, PREVIEW - 1], fill=255)
+        image = Image.composite(image, Image.new("RGB", image.size, (0, 0, 0)), mask)
+        self.preview_photo = ImageTk.PhotoImage(image)
+        self.preview.delete("all")
+        self.preview.create_image(0, 0, anchor="nw", image=self.preview_photo)
+
+    def preview_press(self, event):
+        self.drag_start = (event.x, event.y, self.offset_x, self.offset_y)
+
+    def preview_drag(self, event):
+        x, y, ox, oy = self.drag_start
+        rotation = int(self.rotation_var.get())
+        dx, dy = (event.x - x) / PREVIEW, (event.y - y) / PREVIEW
+        for _ in range(rotation // 90):
+            dx, dy = dy, -dx
+        self.offset_x = max(-2.0, min(2.0, ox + dx))
+        self.offset_y = max(-2.0, min(2.0, oy + dy))
+        self.draw_preview()
+
+    def preview_wheel(self, event, direction=None):
+        step = direction if direction is not None else (1 if event.delta > 0 else -1)
+        self.zoom_var.set(max(0.3, min(4.0, self.zoom_var.get() * (1.1 if step > 0 else 1 / 1.1))))
+        self.preview_changed()
+
+    def preview_changed(self):
+        self.draw_preview()
+        if self.preview_job:
+            self.root.after_cancel(self.preview_job)
+        self.preview_job = self.root.after(500, self.apply_lcd)
+
+    def reset_view(self):
+        self.zoom_var.set(1.0)
+        self.offset_x = self.offset_y = 0.0
+        self.draw_preview()
+        self.apply_lcd()
 
     def build_ajazz(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
@@ -481,6 +573,7 @@ class App:
         self.color1.set(effect.get("color1", "#00a2ff"))
         self.color2.set(effect.get("color2", "#ff0080"))
         self.speed_var.set(effect.get("speed", 1.0))
+        self.saturation_var.set(effect.get("saturation", 100))
         self.loading = False
 
     def apply_effect(self):
@@ -488,7 +581,7 @@ class App:
             return
         kind = next((k for k, v in effects.EFFECTS.items() if v == self.effect_var.get()), "static")
         effect = {"type": kind, "color1": self.color1.value, "color2": self.color2.value,
-                  "speed": round(self.speed_var.get(), 2)}
+                  "speed": round(self.speed_var.get(), 2), "saturation": int(self.saturation_var.get())}
         settings = self.current_settings()
         if settings is None:
             self.config["effect"] = effect
@@ -519,7 +612,11 @@ class App:
         lcd["rotation"] = int(self.rotation_var.get())
         lcd["accent"] = self.accent.value
         lcd["format"] = self.format_var.get()
+        lcd["zoom"] = round(self.zoom_var.get(), 3)
+        lcd["offset_x"] = round(self.offset_x, 3)
+        lcd["offset_y"] = round(self.offset_y, 3)
         self.save()
+        self.draw_preview()
 
     def refresh_profiles(self):
         self.profile_list.delete(0, "end")
@@ -554,6 +651,10 @@ class App:
         self.rotation_var.set(str(lcd["rotation"]))
         self.accent.set(lcd["accent"])
         self.format_var.set(lcd["format"])
+        self.zoom_var.set(lcd.get("zoom", 1.0))
+        self.offset_x = lcd.get("offset_x", 0.0)
+        self.offset_y = lcd.get("offset_y", 0.0)
+        self.draw_preview()
         self.load_selection()
 
     def delete_profile(self):

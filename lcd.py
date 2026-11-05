@@ -51,25 +51,26 @@ def encode(image, fmt):
     return encode_q565(image) if fmt == FORMAT_Q565 else encode_rgb565(image)
 
 
-def fit(image, size, rotation):
+def fit(image, size, rotation, zoom=1.0, dx=0.0, dy=0.0):
     image = image.convert("RGB")
     w, h = image.size
-    scale = size / min(w, h)
-    image = image.resize((max(size, round(w * scale)), max(size, round(h * scale))), Image.LANCZOS)
-    left = (image.width - size) // 2
-    top = (image.height - size) // 2
-    image = image.crop((left, top, left + size, top + size))
+    scale = size / min(w, h) * zoom
+    width, height = max(1, round(w * scale)), max(1, round(h * scale))
+    image = image.resize((width, height), Image.LANCZOS)
+    canvas = Image.new("RGB", (size, size), (0, 0, 0))
+    canvas.paste(image, (round((size - width) / 2 + dx * size), round((size - height) / 2 + dy * size)))
     if rotation:
-        image = image.rotate(-rotation)
-    return image
+        canvas = canvas.rotate(-rotation)
+    return canvas
 
 
-def load_media(path, size, rotation, fmt):
+def load_media(path, size, rotation, fmt, zoom=1.0, dx=0.0, dy=0.0):
     source = Image.open(path)
     frames = []
     for frame in ImageSequence.Iterator(source):
         duration = frame.info.get("duration", source.info.get("duration", 100)) or 100
-        frames.append((encode(fit(frame, size, rotation), fmt), max(20, duration) / 1000))
+        image = fit(frame, size, rotation, zoom, dx, dy)
+        frames.append((encode(image, fmt), max(20, duration) / 1000))
     return frames
 
 
