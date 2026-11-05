@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageTk
 import psutil
 
 import config as cfg
+import theme
 import i18n
 from i18n import t as T
 import lcd as lcd_render
@@ -24,7 +25,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.12"
+VERSION = "1.13"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -141,6 +142,7 @@ class App:
         self.tray = None
 
         self.root = tk.Tk()
+        theme.apply(self.root, self.config.get("theme", "system"))
         self.root.title(f"{APP} {VERSION}")
         try:
             self.root.iconbitmap(asset("icon.ico"))
@@ -187,6 +189,7 @@ class App:
         left.pack(side="left", fill="y")
         ttk.Label(left, text=T("Apparaten")).pack(anchor="w")
         self.device_list = tk.Listbox(left, width=28, exportselection=False, activestyle="none")
+        theme.style_listbox(self.device_list)
         self.device_list.pack(fill="y", expand=True, pady=(4, 0))
         self.device_list.bind("<<ListboxSelect>>", lambda e: self.load_selection())
 
@@ -282,12 +285,12 @@ class App:
                            state="readonly", width=8)
         fmt.grid(row=7, column=1, sticky="w")
         fmt.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
-        ttk.Label(tab, text=T("Blijft het scherm zwart? Probeer rgb565."), foreground="#777").grid(
+        ttk.Label(tab, text=T("Blijft het scherm zwart? Probeer rgb565."), foreground=theme.MUTED).grid(
             row=8, column=1, columnspan=2, sticky="w")
 
         cpu_note = T("CPU-temperatuur: actief") if self.sensors.computer else \
             T("CPU-temperatuur: niet beschikbaar (zie README)")
-        ttk.Label(tab, text=cpu_note, foreground="#777").grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
+        ttk.Label(tab, text=cpu_note, foreground=theme.MUTED).grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
         side = ttk.Frame(tab, padding=(20, 0, 0, 0))
         side.grid(row=0, column=3, rowspan=10, sticky="n")
@@ -300,7 +303,7 @@ class App:
         self.preview.bind("<MouseWheel>", self.preview_wheel)
         self.preview.bind("<Button-4>", lambda e: self.preview_wheel(e, 1))
         self.preview.bind("<Button-5>", lambda e: self.preview_wheel(e, -1))
-        ttk.Label(side, text=T("Sleep om te verschuiven,\nscroll om te zoomen"), justify="center", foreground="#777").pack(pady=(6, 4))
+        ttk.Label(side, text=T("Sleep om te verschuiven,\nscroll om te zoomen"), justify="center", foreground=theme.MUTED).pack(pady=(6, 4))
         zoom_row = ttk.Frame(side)
         zoom_row.pack()
         ttk.Label(zoom_row, text=T("Zoom")).pack(side="left")
@@ -382,10 +385,10 @@ class App:
         ttk.Button(tab, text=T("Kies..."), command=self.pick_ajazz_image).grid(row=1, column=1, padx=6)
         self.ajazz_button = ttk.Button(tab, text=T("Naar toetsenbord sturen"), command=self.upload_ajazz)
         self.ajazz_button.grid(row=2, column=0, sticky="w", pady=10)
-        self.ajazz_status = ttk.Label(tab, foreground="#777", wraplength=520, justify="left")
+        self.ajazz_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=520, justify="left")
         self.ajazz_status.grid(row=3, column=0, columnspan=3, sticky="w")
         ttk.Label(tab, text=T("Maximaal 30 frames. Fn + Delete wisselt op het toetsenbord tussen klok en afbeelding."),
-                  foreground="#777").grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 0))
+                  foreground=theme.MUTED).grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
     def pick_ajazz_image(self):
         path = filedialog.askopenfilename(filetypes=[(T("Afbeeldingen"), "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
@@ -427,6 +430,7 @@ class App:
         notebook.add(tab, text=T("Profielen"))
 
         self.profile_list = tk.Listbox(tab, width=30, height=12, exportselection=False)
+        theme.style_listbox(self.profile_list)
         self.profile_list.grid(row=0, column=0, rowspan=5, sticky="ns")
         self.profile_name = tk.StringVar()
         ttk.Entry(tab, textvariable=self.profile_name, width=24).grid(row=0, column=1, padx=10, sticky="w")
@@ -443,7 +447,7 @@ class App:
                         command=lambda: set_autostart(self.autostart_var.get())).grid(row=0, column=0, sticky="w")
         note = T("Draait als administrator: autostart met CPU-temperatuur.") if is_admin() else \
             T("Niet als administrator: CPU-temperatuur werkt alleen als administrator.")
-        ttk.Label(tab, text=note, foreground="#777").grid(row=1, column=0, sticky="w", pady=(4, 12))
+        ttk.Label(tab, text=note, foreground=theme.MUTED).grid(row=1, column=0, sticky="w", pady=(4, 12))
         ttk.Button(tab, text=T("Apparaten opnieuw zoeken"), command=self.rescan).grid(row=2, column=0, sticky="w")
         ttk.Button(tab, text=T("Logbestand openen"), command=lambda: os.startfile(LOG_PATH)).grid(
             row=3, column=0, sticky="w", pady=6)
@@ -459,11 +463,22 @@ class App:
         language.bind("<<ComboboxSelected>>", lambda e: self.change_language(
             next(k for k, v in names.items() if v == self.language_var.get())))
 
+        theme_row = ttk.Frame(tab)
+        theme_row.grid(row=9, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(theme_row, text=T("Thema")).pack(side="left")
+        themes = {"system": T("Systeem"), "light": T("Licht"), "dark": T("Donker")}
+        self.theme_var = tk.StringVar(value=themes.get(self.config.get("theme", "system")))
+        theme_box = ttk.Combobox(theme_row, textvariable=self.theme_var, values=list(themes.values()),
+                                 state="readonly", width=12)
+        theme_box.pack(side="left", padx=8)
+        theme_box.bind("<<ComboboxSelected>>", lambda e: self.change_theme(
+            next(k for k, v in themes.items() if v == self.theme_var.get())))
+
         ttk.Separator(tab).grid(row=4, column=0, sticky="ew", pady=12)
         ttk.Label(tab, text=T("Versie {version}", version=VERSION)).grid(row=5, column=0, sticky="w")
         self.update_button = ttk.Button(tab, text=T("Zoeken naar updates"), command=self.check_updates)
         self.update_button.grid(row=6, column=0, sticky="w", pady=6)
-        self.update_status = ttk.Label(tab, foreground="#777", wraplength=520, justify="left")
+        self.update_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=520, justify="left")
         self.update_status.grid(row=7, column=0, sticky="w")
         self.update_info = None
         self.update_result = None
@@ -476,6 +491,14 @@ class App:
         i18n.LANG = code
         if messagebox.askyesno(APP, T("Herstart LiteRGB om de taal te wijzigen.") + "\n\n" +
                                ("Nu herstarten?" if code == "nl" else "Restart now?")):
+            self.restart()
+
+    def change_theme(self, choice):
+        if choice == self.config.get("theme", "system"):
+            return
+        self.config["theme"] = choice
+        self.save()
+        if messagebox.askyesno(APP, T("LiteRGB herstarten om het thema toe te passen?")):
             self.restart()
 
     def restart(self):
