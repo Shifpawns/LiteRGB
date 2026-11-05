@@ -19,7 +19,7 @@ def system_prefers_dark():
         path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path) as key:
             return winreg.QueryValueEx(key, "AppsUseLightTheme")[0] == 0
-    except OSError:
+    except Exception:
         return False
 
 

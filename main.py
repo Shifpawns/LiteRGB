@@ -25,7 +25,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.13"
+VERSION = "1.14"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -153,6 +153,7 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
 
         notebook = ttk.Notebook(self.root)
+        self.notebook = notebook
         notebook.pack(fill="both", expand=True, padx=8, pady=(8, 0))
         self.build_lighting(notebook)
         self.build_lcd(notebook)
@@ -248,6 +249,7 @@ class App:
     def build_lcd(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text=T("Kraken LCD"))
+        self.lcd_tab = tab
         lcd = self.config["lcd"]
 
         self.lcd_mode = tk.StringVar(value=lcd["mode"])
@@ -378,6 +380,7 @@ class App:
     def build_ajazz(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text=T("Ajazz-scherm"))
+        self.ajazz_tab = tab
         ttk.Label(tab, text=T("Ajazz-uitleg"),
                   justify="left").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
         self.ajazz_image = tk.StringVar(value=self.config.get("ajazz_image", ""))
@@ -581,7 +584,15 @@ class App:
     def device_keys(self):
         return [None] + [k for k, d in self.engine.devices.items() if d.positions or d.hardware_only]
 
+    def show_tab(self, tab, visible):
+        if visible:
+            self.notebook.add(tab)
+        elif self.notebook.tab(tab, "state") != "hidden":
+            self.notebook.hide(tab)
+
     def refresh_status(self):
+        self.show_tab(self.lcd_tab, "nzxt_kraken" in self.engine.devices)
+        self.show_tab(self.ajazz_tab, "ajazz_ak820" in self.engine.devices)
         keys = self.device_keys()
         names = [T("Alle apparaten (sync)")] + [self.engine.devices[k].name for k in keys[1:]]
         if list(self.device_list.get(0, "end")) != names:
