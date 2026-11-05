@@ -11,18 +11,25 @@ CHUNK = 4096
 MAX_FRAMES = 30
 
 
-def load_frames(path):
+def preview_frames(path):
     source = Image.open(path)
     frames = []
     for frame in ImageSequence.Iterator(source):
         image = ImageOps.fit(frame.convert("RGB"), (SIZE, SIZE), Image.LANCZOS)
+        delay = max(40, frame.info.get("duration", source.info.get("duration", 100)) or 100)
+        frames.append((image, delay))
+        if len(frames) >= MAX_FRAMES:
+            break
+    return frames
+
+
+def load_frames(path):
+    frames = []
+    for image, delay in preview_frames(path):
         pixels = bytearray()
         for r, g, b in image.getdata():
             pixels += (((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)).to_bytes(2, "little")
-        delay = max(40, frame.info.get("duration", source.info.get("duration", 100)) or 100)
         frames.append((bytes(pixels), delay))
-        if len(frames) >= MAX_FRAMES:
-            break
     return frames
 
 

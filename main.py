@@ -27,7 +27,8 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.17"
+AJAZZ_PREVIEW = 192
+VERSION = "1.18"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -199,8 +200,8 @@ class App:
             self.root.iconbitmap(asset("icon.ico"))
         except tk.TclError:
             pass
-        self.root.geometry("860x520")
-        self.root.minsize(820, 500)
+        self.root.geometry("920x520")
+        self.root.minsize(900, 500)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         notebook = ttk.Notebook(self.root)
@@ -350,7 +351,11 @@ class App:
         ttk.Label(tab, text=T("Bestand")).grid(row=3, column=0, sticky="w", pady=(12, 4))
         self.image_var = tk.StringVar(value=lcd["image"])
         ttk.Entry(tab, textvariable=self.image_var, width=26, state="readonly").grid(row=3, column=1, sticky="w")
-        ttk.Button(tab, text=T("Kies..."), command=self.pick_image).grid(row=3, column=2, padx=6)
+        file_buttons = ttk.Frame(tab)
+        file_buttons.grid(row=3, column=2, padx=6, sticky="w")
+        ttk.Button(file_buttons, text=T("Kies..."), command=self.pick_image).pack(side="left")
+        ttk.Button(file_buttons, text=T("GIF zoeken..."), command=lambda: self.open_gif_search(self.use_lcd_gif)).pack(
+            side="left", padx=(6, 0))
 
         ttk.Label(tab, text=T("Helderheid")).grid(row=4, column=0, sticky="w", pady=4)
         self.lcd_brightness = tk.IntVar(value=lcd["brightness"])
@@ -485,8 +490,23 @@ class App:
         ttk.Label(tab, text=T("Ajazz-uitleg"),
                   justify="left").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
         self.ajazz_image = tk.StringVar(value=self.config.get("ajazz_image", ""))
-        ttk.Entry(tab, textvariable=self.ajazz_image, width=42, state="readonly").grid(row=1, column=0, sticky="w")
-        ttk.Button(tab, text=T("Kies..."), command=self.pick_ajazz_image).grid(row=1, column=1, padx=6)
+        ttk.Entry(tab, textvariable=self.ajazz_image, width=34, state="readonly").grid(row=1, column=0, sticky="w")
+        ajazz_buttons = ttk.Frame(tab)
+        ajazz_buttons.grid(row=1, column=1, padx=6, sticky="w")
+        ttk.Button(ajazz_buttons, text=T("Kies..."), command=self.pick_ajazz_image).pack(side="left")
+        ttk.Button(ajazz_buttons, text=T("GIF zoeken..."),
+                   command=lambda: self.open_gif_search(self.use_ajazz_gif)).pack(side="left", padx=(6, 0))
+
+        preview_side = ttk.Frame(tab, padding=(20, 0, 0, 0))
+        preview_side.grid(row=0, column=3, rowspan=6, sticky="n")
+        self.ajazz_preview = tk.Canvas(preview_side, width=AJAZZ_PREVIEW, height=AJAZZ_PREVIEW,
+                                       highlightthickness=0, bg="#0b0d10")
+        self.ajazz_preview.pack()
+        ttk.Label(preview_side, text=T("Voorbeeld op het toetsenbord"), foreground=theme.MUTED).pack(pady=(6, 0))
+        self.ajazz_frames = []
+        self.ajazz_frame_index = 0
+        self.ajazz_animation = None
+        self.load_ajazz_preview()
         self.ajazz_button = ttk.Button(tab, text=T("Naar toetsenbord sturen"), command=self.upload_ajazz)
         self.ajazz_button.grid(row=2, column=0, sticky="w", pady=10)
         self.ajazz_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=520, justify="left")
@@ -497,9 +517,52 @@ class App:
     def pick_ajazz_image(self):
         path = filedialog.askopenfilename(filetypes=[(T("Afbeeldingen"), "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
         if path:
-            self.ajazz_image.set(path)
-            self.config["ajazz_image"] = path
-            self.save()
+            self.use_ajazz_gif(path)
+
+    def use_ajazz_gif(self, path):
+        self.ajazz_image.set(path)
+        self.config["ajazz_image"] = path
+        self.save()
+        self.load_ajazz_preview()
+
+    def use_lcd_gif(self, path):
+        self.image_var.set(path)
+        self.lcd_mode.set("image")
+        self.apply_lcd()
+
+    def open_gif_search(self, on_pick):
+        from gif_search import GifSearch
+        GifSearch(self, on_pick)
+
+    def load_ajazz_preview(self):
+        from devices import ajazz_tft
+        if self.ajazz_animation:
+            self.root.after_cancel(self.ajazz_animation)
+            self.ajazz_animation = None
+        self.ajazz_preview.delete("all")
+        self.ajazz_frames = []
+        path = self.ajazz_image.get()
+        if not path or not os.path.exists(path):
+            return
+        try:
+            for image, delay in ajazz_tft.preview_frames(path):
+                image = image.resize((AJAZZ_PREVIEW, AJAZZ_PREVIEW), Image.NEAREST)
+                self.ajazz_frames.append((ImageTk.PhotoImage(image), delay))
+        except Exception as error:
+            logging.warning("Ajazz preview failed: %s", error)
+            return
+        self.ajazz_frame_index = 0
+        self.animate_ajazz()
+
+    def animate_ajazz(self):
+        if not self.ajazz_frames:
+            return
+        photo, delay = self.ajazz_frames[self.ajazz_frame_index % len(self.ajazz_frames)]
+        self.ajazz_preview.delete("all")
+        self.ajazz_preview.create_image(0, 0, anchor="nw", image=photo)
+        self.ajazz_frame_index += 1
+        if len(self.ajazz_frames) > 1:
+            self.ajazz_animation = self.root.after(delay, self.animate_ajazz)
 
     def upload_ajazz(self):
         path = self.ajazz_image.get()
