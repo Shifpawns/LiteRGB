@@ -15,6 +15,7 @@ from i18n import t as T
 
 API = "https://api.giphy.com/v1/gifs/search"
 KEY_URL = "https://developers.giphy.com/dashboard/"
+PROXY = "https://gif.vanbommel.org"
 THUMB = 120
 COLUMNS = 5
 
@@ -23,6 +24,14 @@ def fetch(url, timeout=15):
     request = urllib.request.Request(url, headers={"User-Agent": "LiteRGB"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
+
+
+def search_proxy(proxy, query):
+    params = urllib.parse.urlencode({"q": query})
+    data = json.loads(fetch(f"{proxy.rstrip('/')}/search?{params}"))
+    if "error" in data:
+        raise OSError(data["error"])
+    return [(item["id"], item["thumb"], item["url"]) for item in data.get("data", [])]
 
 
 def search(key, query, limit=25):
@@ -66,8 +75,6 @@ class GifSearch(tk.Toplevel):
         ttk.Label(self.key_row, text=T("GIPHY API-sleutel")).pack(side="left")
         ttk.Entry(self.key_row, textvariable=self.key, width=36).pack(side="left", padx=8)
         ttk.Button(self.key_row, text=T("Sleutel aanmaken"), command=lambda: webbrowser.open(KEY_URL)).pack(side="left")
-        if not self.key.get():
-            self.key_row.pack(fill="x", pady=(8, 0))
 
         self.status = ttk.Label(frame, foreground=theme.MUTED)
         self.status.pack(anchor="w", pady=6)
@@ -80,21 +87,17 @@ class GifSearch(tk.Toplevel):
         ttk.Label(bottom, text="Powered by GIPHY", foreground=theme.MUTED).pack(side="right")
         ttk.Button(bottom, text=T("API-sleutel"), command=lambda: self.key_row.pack(fill="x", pady=(8, 0),
                                                                                   before=self.status)).pack(side="left")
-        if not self.key.get():
-            self.status.configure(text=T("Maak een gratis sleutel aan bij GIPHY en plak hem hierboven."))
         entry.focus_set()
 
     def run_search(self):
         key = self.key.get().strip()
         query = self.query.get().strip()
-        if not key:
-            self.status.configure(text=T("Vul eerst je GIPHY API-sleutel in."))
-            self.key_row.pack(fill="x", pady=(8, 0), before=self.status)
-            return
         if not query:
             return
-        self.app.config["giphy_key"] = key
-        self.app.save()
+        if key != self.app.config.get("giphy_key", ""):
+            self.app.config["giphy_key"] = key
+            self.app.save()
+        proxy = self.app.config.get("gif_proxy") or PROXY
         self.status.configure(text=T("Zoeken..."))
         for child in self.grid_frame.winfo_children():
             child.destroy()
@@ -102,7 +105,7 @@ class GifSearch(tk.Toplevel):
 
         def work():
             try:
-                results = search(key, query)
+                results = search(key, query) if key else search_proxy(proxy, query)
                 thumbs = []
                 for gif_id, thumb, full in results:
                     try:

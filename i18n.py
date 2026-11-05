@@ -85,8 +85,6 @@ EN = {
     "GIPHY API-sleutel": "GIPHY API key",
     "Sleutel aanmaken": "Create key",
     "API-sleutel": "API key",
-    "Maak een gratis sleutel aan bij GIPHY en plak hem hierboven.": "Create a free key at GIPHY and paste it above.",
-    "Vul eerst je GIPHY API-sleutel in.": "Enter your GIPHY API key first.",
     "Zoeken mislukt: {error}": "Search failed: {error}",
     "Niets gevonden.": "Nothing found.",
     "Klik op een GIF om hem te gebruiken.": "Click a GIF to use it.",
