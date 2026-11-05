@@ -2,6 +2,7 @@ import time
 
 from PIL import Image, ImageOps, ImageSequence
 
+from i18n import t
 from .base import HidHandle, find_hid
 
 SIZE = 128
@@ -78,7 +79,7 @@ def legacy_exchange(dev, command, sub=0, value=0):
 
 def legacy_ack(reply, command):
     if len(reply) < 4 or reply[0] != 0x04 or reply[1] != command or reply[3] != 0x01:
-        raise OSError(f"Toetsenbord weigerde commando {command:02x}")
+        raise OSError(t("Toetsenbord weigerde commando {command:02x}", command=command))
 
 
 def upload_legacy(control_info, data_info, frames, slot=1):
@@ -107,7 +108,7 @@ def upload_legacy(control_info, data_info, frames, slot=1):
             for index in range(chunks):
                 data.write([0x00] + list(payload[index * CHUNK:(index + 1) * CHUNK]), CHUNK + 1)
                 if not data.read(64, 1000):
-                    raise OSError(f"Geen bevestiging voor blok {index + 1}/{chunks}")
+                    raise OSError(t("Geen bevestiging voor blok {index}/{total}", index=index + 1, total=chunks))
             legacy_ack(legacy_exchange(control, 0x02, 0, 0), 0x02)
         except Exception:
             legacy_exchange(control, 0xF0, 0, 1)
@@ -121,10 +122,10 @@ def upload_legacy(control_info, data_info, frames, slot=1):
 def upload(path):
     kind, control, data = find_interfaces()
     if kind is None:
-        return "Geen Ajazz via kabel gevonden. Het scherm kan alleen via de USB-kabel worden ingesteld."
+        return t("Geen Ajazz via kabel gevonden. Het scherm kan alleen via de USB-kabel worden ingesteld.")
     frames = load_frames(path)
     if kind == "web":
         upload_web(data, frames)
     else:
         upload_legacy(control, data, frames)
-    return f"Verstuurd ({len(frames)} frame(s)). Zie je het niet? Druk Fn + Delete om tussen klok en afbeelding te wisselen."
+    return t("Verstuurd ({count} frame(s)). Zie je het niet? Druk Fn + Delete om tussen klok en afbeelding te wisselen.", count=len(frames))

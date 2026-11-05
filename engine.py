@@ -3,6 +3,7 @@ import threading
 import time
 
 import effects
+from i18n import t
 from devices.aerox import SteelSeriesAerox9
 from devices.ajazz_ak820 import AjazzAK820
 from devices.corsair_dram import CorsairDram
@@ -76,7 +77,7 @@ class Engine:
                 result = device.save_to_device(effect, device.last_colors or [], brightness)
             except Exception as error:
                 logging.warning("Save failed for %s: %s", device.name, error)
-                result = f"mislukt ({error})"
+                result = t("mislukt ({error})", error=error)
             results.append((device.name, result or "niet mogelijk"))
         return results
 

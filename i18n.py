@@ -1,0 +1,117 @@
+LANG = "nl"
+
+EN = {
+    "Sluit deze programma's, anders vechten ze om je apparaten:": "Close these programs, otherwise they will fight over your devices:",
+    "Verlichting": "Lighting",
+    "Apparaten": "Devices",
+    "Ingeschakeld": "Enabled",
+    "Eigen effect (niet synchroon)": "Own effect (not synced)",
+    "Effect": "Effect",
+    "Kleuren": "Colors",
+    "Snelheid": "Speed",
+    "Verzadiging": "Saturation",
+    "Helderheid (alles)": "Brightness (all)",
+    "Verlichting aan": "Lights on",
+    "Opslaan in apparaten": "Save to devices",
+    "Kraken LCD": "Kraken LCD",
+    "Sensoren (vloeistof + CPU)": "Sensors (liquid + CPU)",
+    "Afbeelding / GIF": "Image / GIF",
+    "Standaard NZXT-scherm": "Default NZXT screen",
+    "Bestand": "File",
+    "Kies...": "Browse...",
+    "Helderheid": "Brightness",
+    "Draaien": "Rotation",
+    "Accentkleur": "Accent color",
+    "Beeldformaat": "Image format",
+    "Blijft het scherm zwart? Probeer rgb565.": "Screen stays black? Try rgb565.",
+    "CPU-temperatuur: actief": "CPU temperature: active",
+    "CPU-temperatuur: niet beschikbaar (zie README)": "CPU temperature: not available (see README)",
+    "Sleep om te verschuiven,\nscroll om te zoomen": "Drag to move,\nscroll to zoom",
+    "Zoom": "Zoom",
+    "Reset": "Reset",
+    "Ajazz-scherm": "Ajazz screen",
+    "Ajazz-uitleg": "Send an image or GIF to the little screen of the Ajazz AK820 Pro.\n"
+                    "Only works over the USB cable, not through the 2.4 GHz receiver.\n"
+                    "The image is stored in the keyboard, so you only need to do this once.",
+    "Naar toetsenbord sturen": "Send to keyboard",
+    "Maximaal 30 frames. Fn + Delete wisselt op het toetsenbord tussen klok en afbeelding.":
+        "Up to 30 frames. Fn + Delete switches the keyboard between clock and image.",
+    "Afbeeldingen": "Images",
+    "Kies eerst een afbeelding.": "Choose an image first.",
+    "Bezig met versturen...": "Sending...",
+    "Mislukt: {error}": "Failed: {error}",
+    "Profielen": "Profiles",
+    "Huidige opslaan": "Save current",
+    "Laden": "Load",
+    "Verwijderen": "Delete",
+    "Instellingen": "Settings",
+    "Starten met Windows": "Start with Windows",
+    "Draait als administrator: autostart met CPU-temperatuur.": "Running as administrator: autostart with CPU temperature.",
+    "Niet als administrator: CPU-temperatuur werkt alleen als administrator.":
+        "Not running as administrator: CPU temperature only works as administrator.",
+    "Apparaten opnieuw zoeken": "Rescan devices",
+    "Logbestand openen": "Open log file",
+    "Versie {version}": "Version {version}",
+    "Zoeken naar updates": "Check for updates",
+    "Zoeken...": "Checking...",
+    "Kon niet zoeken naar updates: {error}": "Could not check for updates: {error}",
+    "Je hebt de nieuwste versie.": "You have the latest version.",
+    "Bijwerken naar {tag}": "Update to {tag}",
+    "Versie {tag} is beschikbaar.": "Version {tag} is available.",
+    "Bijwerken werkt alleen in LiteRGB.exe. Download de nieuwe versie van GitHub.":
+        "Updating only works in LiteRGB.exe. Download the new version from GitHub.",
+    "{tag} downloaden...": "Downloading {tag}...",
+    "Bijwerken mislukt: {error}": "Update failed: {error}",
+    "Alle apparaten (sync)": "All devices (sync)",
+    "Alle apparaten": "All devices",
+    "{count} apparaten verbonden": "{count} devices connected",
+    "fouten": "errors",
+    "update {tag} beschikbaar (Instellingen)": "update {tag} available (Settings)",
+    "Geen apparaten gevonden": "No devices found",
+    "Opslaan-uitleg": "Save the current lighting to the devices themselves?\n\n"
+                      "They will fall back to this setting when LiteRGB is not running, using each "
+                      "device's built-in effects. Don't do this too often, device memory wears out "
+                      "from many writes.",
+    "Gebruik het formaat 25:30, 35:50, 45:80": "Use the format 25:30, 35:50, 45:80",
+    "Openen": "Open",
+    "(geen)": "(none)",
+    "Sensoren": "Sensors",
+    "Standaard NZXT": "Default NZXT",
+    "Afsluiten": "Quit",
+    "Taal": "Language",
+    "Herstart LiteRGB om de taal te wijzigen.": "Restart LiteRGB to change the language.",
+    "opgeslagen": "saved",
+    "opgeslagen (experimenteel)": "saved (experimental)",
+    "niet mogelijk": "not possible",
+    "mislukt ({error})": "failed ({error})",
+    "toetsenbord slaapt, druk op een toets en probeer opnieuw": "keyboard is asleep, press a key and try again",
+    "VLOEISTOF": "LIQUID",
+    "Uit": "Off",
+    "Statisch": "Static",
+    "Ademen": "Breathing",
+    "Kleurcyclus": "Color cycle",
+    "Regenboog golf": "Rainbow wave",
+    "Verloop": "Gradient",
+    "Geen Ajazz via kabel gevonden. Het scherm kan alleen via de USB-kabel worden ingesteld.":
+        "No Ajazz found over USB. The screen can only be set over the USB cable.",
+    "Verstuurd ({count} frame(s)). Zie je het niet? Druk Fn + Delete om tussen klok en afbeelding te wisselen.":
+        "Sent ({count} frame(s)). Don't see it? Press Fn + Delete to switch between clock and image.",
+    "Toetsenbord weigerde commando {command:02x}": "Keyboard refused command {command:02x}",
+    "Geen bevestiging voor blok {index}/{total}": "No acknowledgement for block {index}/{total}",
+}
+
+NL = {
+    "Ajazz-uitleg": "Afbeelding of GIF naar het schermpje van de Ajazz AK820 Pro sturen.\n"
+                    "Werkt alleen via de USB-kabel, niet via de 2.4 GHz-ontvanger.\n"
+                    "Het beeld wordt in het toetsenbord opgeslagen, je hoeft dit maar één keer te doen.",
+    "Opslaan-uitleg": "Huidige verlichting opslaan in de apparaten zelf?\n\n"
+                      "Ze vallen dan terug op deze instelling als LiteRGB niet draait, "
+                      "met de ingebouwde effecten van elk apparaat. Doe dit niet te vaak, "
+                      "het geheugen van apparaten slijt van veel schrijfacties.",
+}
+
+
+def t(text, **values):
+    table = EN if LANG == "en" else NL
+    result = table.get(text, text)
+    return result.format(**values) if values else result

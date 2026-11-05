@@ -4,6 +4,8 @@ import struct
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageSequence
 
+from i18n import t
+
 FORMAT_Q565 = 0x08
 FORMAT_RGB565 = 0x06
 
@@ -108,7 +110,7 @@ def sensor_frame(size, rotation, liquid, cpu_temp, cpu_load, accent):
     value = f"{liquid:.1f}°" if liquid is not None else "--"
     draw.text((center, center - size * 0.02), value, font=font(int(size * 0.2), True),
               fill=(240, 242, 245), anchor="mm")
-    draw.text((center, center - size * 0.2), "VLOEISTOF", font=font(int(size * 0.055)),
+    draw.text((center, center - size * 0.2), t("VLOEISTOF"), font=font(int(size * 0.055)),
               fill=accent, anchor="mm")
 
     parts = []

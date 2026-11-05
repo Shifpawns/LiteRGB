@@ -6,6 +6,7 @@ FOLDER = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "LiteR
 PATH = os.path.join(FOLDER, "config.json")
 
 DEFAULTS = {
+    "language": "",
     "lights_on": True,
     "brightness": 100,
     "effect": {"type": "wave", "color1": "#00a2ff", "color2": "#ff0080", "speed": 1.0},

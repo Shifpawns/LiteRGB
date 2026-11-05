@@ -14,6 +14,8 @@ from PIL import Image, ImageDraw, ImageTk
 import psutil
 
 import config as cfg
+import i18n
+from i18n import t as T
 import lcd as lcd_render
 import updater
 import effects
@@ -22,7 +24,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.11"
+VERSION = "1.12"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -45,6 +47,13 @@ def base_folder():
 def asset(name):
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "assets", name)
+
+
+def system_language():
+    try:
+        return "nl" if ctypes.windll.kernel32.GetUserDefaultUILanguage() & 0x3FF == 0x13 else "en"
+    except Exception:
+        return "nl"
 
 
 def is_admin():
@@ -120,6 +129,9 @@ class ColorButton(tk.Button):
 class App:
     def __init__(self, start_hidden):
         self.config = cfg.load()
+        if not self.config.get("language"):
+            self.config["language"] = system_language()
+        i18n.LANG = self.config["language"]
         self.sensors = Sensors(os.path.join(base_folder(), "lib"))
         self.engine = Engine(self.config, self.sensors)
         self.selected = None
@@ -159,7 +171,7 @@ class App:
 
         conflicts = running_conflicts()
         if conflicts:
-            messagebox.showwarning(APP, "Sluit deze programma's, anders vechten ze om je apparaten:\n\n"
+            messagebox.showwarning(APP, T("Sluit deze programma's, anders vechten ze om je apparaten:") + "\n\n"
                                    + "\n".join(conflicts))
         if start_hidden:
             self.root.withdraw()
@@ -169,11 +181,11 @@ class App:
 
     def build_lighting(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Verlichting")
+        notebook.add(tab, text=T("Verlichting"))
 
         left = ttk.Frame(tab)
         left.pack(side="left", fill="y")
-        ttk.Label(left, text="Apparaten").pack(anchor="w")
+        ttk.Label(left, text=T("Apparaten")).pack(anchor="w")
         self.device_list = tk.Listbox(left, width=28, exportselection=False, activestyle="none")
         self.device_list.pack(fill="y", expand=True, pady=(4, 0))
         self.device_list.bind("<<ListboxSelect>>", lambda e: self.load_selection())
@@ -186,95 +198,95 @@ class App:
 
         self.enabled_var = tk.BooleanVar(value=True)
         self.own_var = tk.BooleanVar(value=False)
-        self.enabled_check = ttk.Checkbutton(right, text="Ingeschakeld", variable=self.enabled_var,
+        self.enabled_check = ttk.Checkbutton(right, text=T("Ingeschakeld"), variable=self.enabled_var,
                                              command=self.apply_effect)
-        self.own_check = ttk.Checkbutton(right, text="Eigen effect (niet synchroon)", variable=self.own_var,
+        self.own_check = ttk.Checkbutton(right, text=T("Eigen effect (niet synchroon)"), variable=self.own_var,
                                          command=self.apply_effect)
         self.enabled_check.grid(row=1, column=0, columnspan=3, sticky="w")
         self.own_check.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
-        ttk.Label(right, text="Effect").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(right, text=T("Effect")).grid(row=3, column=0, sticky="w", pady=4)
         self.effect_var = tk.StringVar()
         self.effect_box = ttk.Combobox(right, textvariable=self.effect_var, state="readonly",
-                                       values=list(effects.EFFECTS.values()), width=20)
+                                       values=[T(v) for v in effects.EFFECTS.values()], width=20)
         self.effect_box.grid(row=3, column=1, columnspan=2, sticky="w")
         self.effect_box.bind("<<ComboboxSelected>>", lambda e: self.apply_effect())
 
-        ttk.Label(right, text="Kleuren").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(right, text=T("Kleuren")).grid(row=4, column=0, sticky="w", pady=4)
         self.color1 = ColorButton(right, self.apply_effect)
         self.color2 = ColorButton(right, self.apply_effect)
         self.color1.grid(row=4, column=1, sticky="w")
         self.color2.grid(row=4, column=2, sticky="w")
 
-        ttk.Label(right, text="Snelheid").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Label(right, text=T("Snelheid")).grid(row=5, column=0, sticky="w", pady=4)
         self.speed_var = tk.DoubleVar(value=1.0)
         ttk.Scale(right, from_=0.1, to=4.0, variable=self.speed_var, length=200,
                   command=lambda v: self.apply_effect()).grid(row=5, column=1, columnspan=2, sticky="w")
 
-        ttk.Label(right, text="Verzadiging").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Label(right, text=T("Verzadiging")).grid(row=6, column=0, sticky="w", pady=4)
         self.saturation_var = tk.IntVar(value=100)
         ttk.Scale(right, from_=0, to=100, variable=self.saturation_var, length=200,
                   command=lambda v: self.apply_effect()).grid(row=6, column=1, columnspan=2, sticky="w")
 
         ttk.Separator(right).grid(row=7, column=0, columnspan=3, sticky="ew", pady=12)
 
-        ttk.Label(right, text="Helderheid (alles)").grid(row=8, column=0, sticky="w")
+        ttk.Label(right, text=T("Helderheid (alles)")).grid(row=8, column=0, sticky="w")
         self.brightness_var = tk.IntVar(value=self.config["brightness"])
         ttk.Scale(right, from_=0, to=100, variable=self.brightness_var, length=200,
                   command=lambda v: self.apply_brightness()).grid(row=8, column=1, columnspan=2, sticky="w")
 
         self.lights_var = tk.BooleanVar(value=self.config["lights_on"])
-        ttk.Checkbutton(right, text="Verlichting aan", variable=self.lights_var,
+        ttk.Checkbutton(right, text=T("Verlichting aan"), variable=self.lights_var,
                         command=self.apply_brightness).grid(row=9, column=0, columnspan=3, sticky="w", pady=8)
 
-        self.save_button = ttk.Button(right, text="Opslaan in apparaten", command=self.save_to_devices)
+        self.save_button = ttk.Button(right, text=T("Opslaan in apparaten"), command=self.save_to_devices)
         self.save_button.grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def build_lcd(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Kraken LCD")
+        notebook.add(tab, text=T("Kraken LCD"))
         lcd = self.config["lcd"]
 
         self.lcd_mode = tk.StringVar(value=lcd["mode"])
-        modes = [("Sensoren (vloeistof + CPU)", "sensors"), ("Afbeelding / GIF", "image"),
-                 ("Standaard NZXT-scherm", "liquid")]
+        modes = [(T("Sensoren (vloeistof + CPU)"), "sensors"), (T("Afbeelding / GIF"), "image"),
+                 (T("Standaard NZXT-scherm"), "liquid")]
         for row, (text, value) in enumerate(modes):
             ttk.Radiobutton(tab, text=text, value=value, variable=self.lcd_mode,
                             command=self.apply_lcd).grid(row=row, column=0, columnspan=3, sticky="w")
 
-        ttk.Label(tab, text="Bestand").grid(row=3, column=0, sticky="w", pady=(12, 4))
+        ttk.Label(tab, text=T("Bestand")).grid(row=3, column=0, sticky="w", pady=(12, 4))
         self.image_var = tk.StringVar(value=lcd["image"])
         ttk.Entry(tab, textvariable=self.image_var, width=26, state="readonly").grid(row=3, column=1, sticky="w")
-        ttk.Button(tab, text="Kies...", command=self.pick_image).grid(row=3, column=2, padx=6)
+        ttk.Button(tab, text=T("Kies..."), command=self.pick_image).grid(row=3, column=2, padx=6)
 
-        ttk.Label(tab, text="Helderheid").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(tab, text=T("Helderheid")).grid(row=4, column=0, sticky="w", pady=4)
         self.lcd_brightness = tk.IntVar(value=lcd["brightness"])
         ttk.Scale(tab, from_=0, to=100, variable=self.lcd_brightness, length=200,
                   command=lambda v: self.apply_lcd()).grid(row=4, column=1, sticky="w")
 
-        ttk.Label(tab, text="Draaien").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Label(tab, text=T("Draaien")).grid(row=5, column=0, sticky="w", pady=4)
         self.rotation_var = tk.StringVar(value=str(lcd["rotation"]))
         rotation = ttk.Combobox(tab, textvariable=self.rotation_var, values=["0", "90", "180", "270"],
                                 state="readonly", width=6)
         rotation.grid(row=5, column=1, sticky="w")
         rotation.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
 
-        ttk.Label(tab, text="Accentkleur").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Label(tab, text=T("Accentkleur")).grid(row=6, column=0, sticky="w", pady=4)
         self.accent = ColorButton(tab, self.apply_lcd)
         self.accent.set(lcd["accent"])
         self.accent.grid(row=6, column=1, sticky="w")
 
-        ttk.Label(tab, text="Beeldformaat").grid(row=7, column=0, sticky="w", pady=4)
+        ttk.Label(tab, text=T("Beeldformaat")).grid(row=7, column=0, sticky="w", pady=4)
         self.format_var = tk.StringVar(value=lcd["format"])
         fmt = ttk.Combobox(tab, textvariable=self.format_var, values=["q565", "rgb565"],
                            state="readonly", width=8)
         fmt.grid(row=7, column=1, sticky="w")
         fmt.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
-        ttk.Label(tab, text="Blijft het scherm zwart? Probeer rgb565.", foreground="#777").grid(
+        ttk.Label(tab, text=T("Blijft het scherm zwart? Probeer rgb565."), foreground="#777").grid(
             row=8, column=1, columnspan=2, sticky="w")
 
-        cpu_note = "CPU-temperatuur: actief" if self.sensors.computer else \
-            "CPU-temperatuur: niet beschikbaar (zie README)"
+        cpu_note = T("CPU-temperatuur: actief") if self.sensors.computer else \
+            T("CPU-temperatuur: niet beschikbaar (zie README)")
         ttk.Label(tab, text=cpu_note, foreground="#777").grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
         side = ttk.Frame(tab, padding=(20, 0, 0, 0))
@@ -288,14 +300,14 @@ class App:
         self.preview.bind("<MouseWheel>", self.preview_wheel)
         self.preview.bind("<Button-4>", lambda e: self.preview_wheel(e, 1))
         self.preview.bind("<Button-5>", lambda e: self.preview_wheel(e, -1))
-        ttk.Label(side, text="Sleep om te verschuiven,\nscroll om te zoomen", justify="center", foreground="#777").pack(pady=(6, 4))
+        ttk.Label(side, text=T("Sleep om te verschuiven,\nscroll om te zoomen"), justify="center", foreground="#777").pack(pady=(6, 4))
         zoom_row = ttk.Frame(side)
         zoom_row.pack()
-        ttk.Label(zoom_row, text="Zoom").pack(side="left")
+        ttk.Label(zoom_row, text=T("Zoom")).pack(side="left")
         self.zoom_var = tk.DoubleVar(value=lcd.get("zoom", 1.0))
         ttk.Scale(zoom_row, from_=0.3, to=4.0, variable=self.zoom_var, length=150,
                   command=lambda v: self.preview_changed()).pack(side="left", padx=6)
-        ttk.Button(side, text="Reset", command=self.reset_view).pack(pady=6)
+        ttk.Button(side, text=T("Reset"), command=self.reset_view).pack(pady=6)
         self.offset_x = lcd.get("offset_x", 0.0)
         self.offset_y = lcd.get("offset_y", 0.0)
         self.preview_source = (None, None)
@@ -362,23 +374,21 @@ class App:
 
     def build_ajazz(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Ajazz-scherm")
-        ttk.Label(tab, text="Afbeelding of GIF naar het schermpje van de Ajazz AK820 Pro sturen.\n"
-                            "Werkt alleen via de USB-kabel, niet via de 2.4 GHz-ontvanger.\n"
-                            "Het beeld wordt in het toetsenbord opgeslagen, je hoeft dit maar één keer te doen.",
+        notebook.add(tab, text=T("Ajazz-scherm"))
+        ttk.Label(tab, text=T("Ajazz-uitleg"),
                   justify="left").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 12))
         self.ajazz_image = tk.StringVar(value=self.config.get("ajazz_image", ""))
         ttk.Entry(tab, textvariable=self.ajazz_image, width=42, state="readonly").grid(row=1, column=0, sticky="w")
-        ttk.Button(tab, text="Kies...", command=self.pick_ajazz_image).grid(row=1, column=1, padx=6)
-        self.ajazz_button = ttk.Button(tab, text="Naar toetsenbord sturen", command=self.upload_ajazz)
+        ttk.Button(tab, text=T("Kies..."), command=self.pick_ajazz_image).grid(row=1, column=1, padx=6)
+        self.ajazz_button = ttk.Button(tab, text=T("Naar toetsenbord sturen"), command=self.upload_ajazz)
         self.ajazz_button.grid(row=2, column=0, sticky="w", pady=10)
         self.ajazz_status = ttk.Label(tab, foreground="#777", wraplength=520, justify="left")
         self.ajazz_status.grid(row=3, column=0, columnspan=3, sticky="w")
-        ttk.Label(tab, text="Maximaal 30 frames. Fn + Delete wisselt op het toetsenbord tussen klok en afbeelding.",
+        ttk.Label(tab, text=T("Maximaal 30 frames. Fn + Delete wisselt op het toetsenbord tussen klok en afbeelding."),
                   foreground="#777").grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
     def pick_ajazz_image(self):
-        path = filedialog.askopenfilename(filetypes=[("Afbeeldingen", "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
+        path = filedialog.askopenfilename(filetypes=[(T("Afbeeldingen"), "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
         if path:
             self.ajazz_image.set(path)
             self.config["ajazz_image"] = path
@@ -387,10 +397,10 @@ class App:
     def upload_ajazz(self):
         path = self.ajazz_image.get()
         if not path or not os.path.exists(path):
-            self.ajazz_status.configure(text="Kies eerst een afbeelding.")
+            self.ajazz_status.configure(text=T("Kies eerst een afbeelding."))
             return
         self.ajazz_button.state(["disabled"])
-        self.ajazz_status.configure(text="Bezig met versturen...")
+        self.ajazz_status.configure(text=T("Bezig met versturen..."))
 
         def work():
             from devices import ajazz_tft
@@ -398,7 +408,7 @@ class App:
                 message = ajazz_tft.upload(path)
             except Exception as error:
                 logging.warning("Ajazz screen upload failed: %s", error)
-                message = f"Mislukt: {error}"
+                message = T("Mislukt: {error}", error=error)
             self.ajazz_result = message
 
         self.ajazz_result = None
@@ -414,45 +424,77 @@ class App:
 
     def build_profiles(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Profielen")
+        notebook.add(tab, text=T("Profielen"))
 
         self.profile_list = tk.Listbox(tab, width=30, height=12, exportselection=False)
         self.profile_list.grid(row=0, column=0, rowspan=5, sticky="ns")
         self.profile_name = tk.StringVar()
         ttk.Entry(tab, textvariable=self.profile_name, width=24).grid(row=0, column=1, padx=10, sticky="w")
-        ttk.Button(tab, text="Huidige opslaan", command=self.save_profile).grid(row=1, column=1, padx=10, sticky="ew")
-        ttk.Button(tab, text="Laden", command=self.load_profile).grid(row=2, column=1, padx=10, sticky="ew")
-        ttk.Button(tab, text="Verwijderen", command=self.delete_profile).grid(row=3, column=1, padx=10, sticky="ew")
+        ttk.Button(tab, text=T("Huidige opslaan"), command=self.save_profile).grid(row=1, column=1, padx=10, sticky="ew")
+        ttk.Button(tab, text=T("Laden"), command=self.load_profile).grid(row=2, column=1, padx=10, sticky="ew")
+        ttk.Button(tab, text=T("Verwijderen"), command=self.delete_profile).grid(row=3, column=1, padx=10, sticky="ew")
         self.refresh_profiles()
 
     def build_settings(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
-        notebook.add(tab, text="Instellingen")
+        notebook.add(tab, text=T("Instellingen"))
         self.autostart_var = tk.BooleanVar(value=autostart_enabled())
-        ttk.Checkbutton(tab, text="Starten met Windows", variable=self.autostart_var,
+        ttk.Checkbutton(tab, text=T("Starten met Windows"), variable=self.autostart_var,
                         command=lambda: set_autostart(self.autostart_var.get())).grid(row=0, column=0, sticky="w")
-        note = "Draait als administrator: autostart met CPU-temperatuur." if is_admin() else \
-            "Niet als administrator: CPU-temperatuur werkt alleen als administrator."
+        note = T("Draait als administrator: autostart met CPU-temperatuur.") if is_admin() else \
+            T("Niet als administrator: CPU-temperatuur werkt alleen als administrator.")
         ttk.Label(tab, text=note, foreground="#777").grid(row=1, column=0, sticky="w", pady=(4, 12))
-        ttk.Button(tab, text="Apparaten opnieuw zoeken", command=self.rescan).grid(row=2, column=0, sticky="w")
-        ttk.Button(tab, text="Logbestand openen", command=lambda: os.startfile(LOG_PATH)).grid(
+        ttk.Button(tab, text=T("Apparaten opnieuw zoeken"), command=self.rescan).grid(row=2, column=0, sticky="w")
+        ttk.Button(tab, text=T("Logbestand openen"), command=lambda: os.startfile(LOG_PATH)).grid(
             row=3, column=0, sticky="w", pady=6)
 
+        language_row = ttk.Frame(tab)
+        language_row.grid(row=8, column=0, sticky="w", pady=(16, 0))
+        ttk.Label(language_row, text="Language" if i18n.LANG == "en" else "Taal / Language").pack(side="left")
+        names = {"nl": "Nederlands", "en": "English"}
+        self.language_var = tk.StringVar(value=names.get(self.config["language"], "Nederlands"))
+        language = ttk.Combobox(language_row, textvariable=self.language_var, values=list(names.values()),
+                                state="readonly", width=12)
+        language.pack(side="left", padx=8)
+        language.bind("<<ComboboxSelected>>", lambda e: self.change_language(
+            next(k for k, v in names.items() if v == self.language_var.get())))
+
         ttk.Separator(tab).grid(row=4, column=0, sticky="ew", pady=12)
-        ttk.Label(tab, text=f"Versie {VERSION}").grid(row=5, column=0, sticky="w")
-        self.update_button = ttk.Button(tab, text="Zoeken naar updates", command=self.check_updates)
+        ttk.Label(tab, text=T("Versie {version}", version=VERSION)).grid(row=5, column=0, sticky="w")
+        self.update_button = ttk.Button(tab, text=T("Zoeken naar updates"), command=self.check_updates)
         self.update_button.grid(row=6, column=0, sticky="w", pady=6)
         self.update_status = ttk.Label(tab, foreground="#777", wraplength=520, justify="left")
         self.update_status.grid(row=7, column=0, sticky="w")
         self.update_info = None
         self.update_result = None
 
+    def change_language(self, code):
+        if code == self.config.get("language"):
+            return
+        self.config["language"] = code
+        self.save()
+        i18n.LANG = code
+        if messagebox.askyesno(APP, T("Herstart LiteRGB om de taal te wijzigen.") + "\n\n" +
+                               ("Nu herstarten?" if code == "nl" else "Restart now?")):
+            self.restart()
+
+    def restart(self):
+        self.save()
+        self.engine.stop()
+        if self.tray:
+            self.tray.stop()
+        command = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, os.path.abspath(__file__)]
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("_MEI", "_PYI"))}
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        subprocess.Popen(command + ["--after-update"], env=env, close_fds=True)
+        self.root.destroy()
+
     def check_updates(self, silent=False):
         if self.update_info:
             return self.install_update()
         self.update_button.state(["disabled"])
         if not silent:
-            self.update_status.configure(text="Zoeken...")
+            self.update_status.configure(text=T("Zoeken..."))
 
         def work():
             try:
@@ -472,24 +514,24 @@ class App:
         state, value = self.update_result
         if state == "error":
             if not silent:
-                self.update_status.configure(text=f"Kon niet zoeken naar updates: {value}")
+                self.update_status.configure(text=T("Kon niet zoeken naar updates: {error}", error=value))
         elif value is None:
             if not silent:
-                self.update_status.configure(text="Je hebt de nieuwste versie.")
+                self.update_status.configure(text=T("Je hebt de nieuwste versie."))
         else:
             tag, url, notes = value
             self.update_info = (tag, url)
-            self.update_button.configure(text=f"Bijwerken naar {tag}")
-            self.update_status.configure(text=notes.strip()[:400] or f"Versie {tag} is beschikbaar.")
+            self.update_button.configure(text=T("Bijwerken naar {tag}", tag=tag))
+            self.update_status.configure(text=notes.strip()[:400] or T("Versie {tag} is beschikbaar.", tag=tag))
 
     def install_update(self):
         tag, url = self.update_info
         if not updater.is_frozen():
-            self.update_status.configure(text="Bijwerken werkt alleen in LiteRGB.exe. "
-                                              "Download de nieuwe versie van GitHub.")
+            self.update_status.configure(text=T("Bijwerken werkt alleen in LiteRGB.exe. "
+                                                "Download de nieuwe versie van GitHub."))
             return
         self.update_button.state(["disabled"])
-        self.update_status.configure(text=f"{tag} downloaden...")
+        self.update_status.configure(text=T("{tag} downloaden...", tag=tag))
 
         def work():
             try:
@@ -511,14 +553,14 @@ class App:
             self.quit()
         else:
             self.update_button.state(["!disabled"])
-            self.update_status.configure(text=f"Bijwerken mislukt: {value}")
+            self.update_status.configure(text=T("Bijwerken mislukt: {error}", error=value))
 
     def device_keys(self):
         return [None] + [k for k, d in self.engine.devices.items() if d.positions or d.hardware_only]
 
     def refresh_status(self):
         keys = self.device_keys()
-        names = ["Alle apparaten (sync)"] + [self.engine.devices[k].name for k in keys[1:]]
+        names = [T("Alle apparaten (sync)")] + [self.engine.devices[k].name for k in keys[1:]]
         if list(self.device_list.get(0, "end")) != names:
             current = self.selected
             self.device_list.delete(0, "end")
@@ -528,11 +570,11 @@ class App:
             self.device_list.selection_set(index)
 
         count = len(self.engine.devices)
-        text = f"{count} apparaten verbonden"
+        text = T("{count} apparaten verbonden", count=count)
         if self.engine.errors:
-            text += f"  ·  fouten: {', '.join(self.engine.errors)}"
+            text += f"  ·  {T('fouten')}: {', '.join(self.engine.errors)}"
         if self.update_info:
-            text += f"  ·  update {self.update_info[0]} beschikbaar (Instellingen)"
+            text += "  ·  " + T("update {tag} beschikbaar (Instellingen)", tag=self.update_info[0])
         self.status.configure(text=text)
 
     def poll(self):
@@ -540,8 +582,8 @@ class App:
         if self.save_results is not None:
             results, self.save_results = self.save_results, None
             self.save_button.state(["!disabled"])
-            lines = [f"{name}: {result}" for name, result in results]
-            messagebox.showinfo(APP, "\n".join(lines) or "Geen apparaten gevonden")
+            lines = [f"{name}: {T(result)}" for name, result in results]
+            messagebox.showinfo(APP, "\n".join(lines) or T("Geen apparaten gevonden"))
         self.root.after(1000, self.poll)
 
     def current_settings(self):
@@ -557,7 +599,7 @@ class App:
         self.loading = True
         settings = self.current_settings()
         if settings is None:
-            self.title.configure(text="Alle apparaten")
+            self.title.configure(text=T("Alle apparaten"))
             self.enabled_check.state(["disabled"])
             self.own_check.state(["disabled"])
             effect = self.config["effect"]
@@ -569,7 +611,7 @@ class App:
             self.own_var.set(settings.get("own_effect", False))
             effect = settings.get("effect") or dict(self.config["effect"])
 
-        self.effect_var.set(effects.EFFECTS.get(effect.get("type"), "Statisch"))
+        self.effect_var.set(T(effects.EFFECTS.get(effect.get("type"), "Statisch")))
         self.color1.set(effect.get("color1", "#00a2ff"))
         self.color2.set(effect.get("color2", "#ff0080"))
         self.speed_var.set(effect.get("speed", 1.0))
@@ -579,7 +621,7 @@ class App:
     def apply_effect(self):
         if self.loading:
             return
-        kind = next((k for k, v in effects.EFFECTS.items() if v == self.effect_var.get()), "static")
+        kind = next((k for k, v in effects.EFFECTS.items() if T(v) == self.effect_var.get()), "static")
         effect = {"type": kind, "color1": self.color1.value, "color2": self.color2.value,
                   "speed": round(self.speed_var.get(), 2), "saturation": int(self.saturation_var.get())}
         settings = self.current_settings()
@@ -598,7 +640,7 @@ class App:
         self.save()
 
     def pick_image(self):
-        path = filedialog.askopenfilename(filetypes=[("Afbeeldingen", "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
+        path = filedialog.askopenfilename(filetypes=[(T("Afbeeldingen"), "*.png *.jpg *.jpeg *.gif *.webp *.bmp")])
         if path:
             self.image_var.set(path)
             self.lcd_mode.set("image")
@@ -665,10 +707,7 @@ class App:
             self.refresh_profiles()
 
     def save_to_devices(self):
-        if not messagebox.askyesno(APP, "Huidige verlichting opslaan in de apparaten zelf?\n\n"
-                                   "Ze vallen dan terug op deze instelling als LiteRGB niet draait, "
-                                   "met de ingebouwde effecten van elk apparaat. Doe dit niet te vaak, "
-                                   "het geheugen van apparaten slijt van veel schrijfacties."):
+        if not messagebox.askyesno(APP, T("Opslaan-uitleg")):
             return
         self.save_button.state(["disabled"])
         self.engine.request_save(lambda results: setattr(self, "save_results", results))
@@ -706,16 +745,16 @@ class App:
                     for name in sorted(self.config["profiles"])]
         lcd_modes = [item(text, (lambda m: lambda: later(0, self.set_lcd_mode, m))(mode),
                           checked=(lambda m: lambda i: self.config["lcd"]["mode"] == m)(mode), radio=True)
-                     for text, mode in [("Sensoren", "sensors"), ("Afbeelding / GIF", "image"),
-                                        ("Standaard NZXT", "liquid")]]
+                     for text, mode in [(T("Sensoren"), "sensors"), (T("Afbeelding / GIF"), "image"),
+                                        (T("Standaard NZXT"), "liquid")]]
         return pystray.Menu(
-            item("Openen", lambda: later(0, self.show), default=True),
-            item("Verlichting aan", lambda: later(0, self.toggle_lights),
+            item(T("Openen"), lambda: later(0, self.show), default=True),
+            item(T("Verlichting aan"), lambda: later(0, self.toggle_lights),
                  checked=lambda i: self.config.get("lights_on", True)),
-            item("Profielen", pystray.Menu(*profiles) if profiles else pystray.Menu(item("(geen)", None, enabled=False))),
-            item("Kraken LCD", pystray.Menu(*lcd_modes)),
+            item(T("Profielen"), pystray.Menu(*profiles) if profiles else pystray.Menu(item(T("(geen)"), None, enabled=False))),
+            item(T("Kraken LCD"), pystray.Menu(*lcd_modes)),
             pystray.Menu.SEPARATOR,
-            item("Afsluiten", lambda: later(0, self.quit)),
+            item(T("Afsluiten"), lambda: later(0, self.quit)),
         )
 
     def update_tray_menu(self):
