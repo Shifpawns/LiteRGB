@@ -6,9 +6,10 @@ import tkinter as tk
 import urllib.parse
 import urllib.request
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from tkinter import ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageSequence, ImageTk
 
 import theme
 from i18n import t as T
@@ -18,6 +19,24 @@ KEY_URL = "https://developers.giphy.com/dashboard/"
 PROXY = "https://gif.vanbommel.org"
 THUMB = 120
 COLUMNS = 5
+MAX_THUMB_FRAMES = 60
+
+
+def animated_url(still):
+    return still.replace("_s.gif", ".gif")
+
+
+def thumb_frames(url):
+    source = Image.open(io.BytesIO(fetch(url)))
+    frames = []
+    for frame in ImageSequence.Iterator(source):
+        image = frame.convert("RGB")
+        image.thumbnail((THUMB, THUMB))
+        delay = max(40, frame.info.get("duration", source.info.get("duration", 100)) or 100)
+        frames.append((image, delay))
+        if len(frames) >= MAX_THUMB_FRAMES:
+            break
+    return frames
 
 
 def fetch(url, timeout=15):
@@ -53,6 +72,8 @@ class GifSearch(tk.Toplevel):
         self.app = app
         self.on_pick = on_pick
         self.photos = []
+        self.generation = 0
+        self.pool = ThreadPoolExecutor(max_workers=6)
         self.title(T("GIF zoeken"))
         self.geometry("700x620")
         if theme.DARK:
@@ -102,36 +123,73 @@ class GifSearch(tk.Toplevel):
         for child in self.grid_frame.winfo_children():
             child.destroy()
         self.photos = []
+        self.generation += 1
+        generation = self.generation
 
         def work():
             try:
                 results = search(key, query) if key else search_proxy(proxy, query)
-                thumbs = []
-                for gif_id, thumb, full in results:
+
+                def still(result):
+                    gif_id, thumb, full = result
                     try:
                         image = Image.open(io.BytesIO(fetch(thumb))).convert("RGB")
                         image.thumbnail((THUMB, THUMB))
-                        thumbs.append((gif_id, image, full))
+                        return gif_id, image, full, thumb
                     except Exception:
-                        pass
-                self.after(0, lambda: self.show(thumbs))
+                        return None
+
+                with ThreadPoolExecutor(max_workers=8) as stills:
+                    thumbs = [t for t in stills.map(still, results) if t]
+                self.after(0, lambda: self.show(thumbs, generation))
             except Exception as error:
                 self.after(0, lambda e=error: self.status.configure(text=T("Zoeken mislukt: {error}", error=e)))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def show(self, thumbs):
+    def show(self, thumbs, generation):
+        if generation != self.generation:
+            return
         if not thumbs:
             self.status.configure(text=T("Niets gevonden."))
             return
         self.status.configure(text=T("Klik op een GIF om hem te gebruiken."))
-        for index, (gif_id, image, full) in enumerate(thumbs):
+        for index, (gif_id, image, full, still) in enumerate(thumbs):
             photo = ImageTk.PhotoImage(image)
             self.photos.append(photo)
             button = tk.Button(self.grid_frame, image=photo, relief="flat", bd=0, cursor="hand2",
                                bg=theme.BG if theme.DARK else None,
                                command=lambda g=gif_id, u=full: self.pick(g, u))
             button.grid(row=index // COLUMNS, column=index % COLUMNS, padx=3, pady=3)
+            self.load_animation(button, animated_url(still), generation)
+
+    def load_animation(self, button, url, generation):
+        def work():
+            try:
+                frames = thumb_frames(url)
+            except Exception:
+                return
+            if len(frames) > 1:
+                self.after(0, lambda: self.start_animation(button, frames, generation))
+
+        self.pool.submit(work)
+
+    def start_animation(self, button, frames, generation):
+        if generation != self.generation:
+            return
+        photos = [(ImageTk.PhotoImage(image), delay) for image, delay in frames]
+        self.photos.extend(p for p, _ in photos)
+        self.animate(button, photos, 0, generation)
+
+    def animate(self, button, photos, index, generation):
+        if generation != self.generation:
+            return
+        photo, delay = photos[index % len(photos)]
+        try:
+            button.configure(image=photo)
+        except tk.TclError:
+            return
+        self.after(delay, lambda: self.animate(button, photos, index + 1, generation))
 
     def pick(self, gif_id, url):
         self.status.configure(text=T("Downloaden..."))
