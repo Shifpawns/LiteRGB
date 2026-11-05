@@ -33,12 +33,31 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Get LibreHardwareMonitor
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.9.6 -R LibreHardwareMonitor/LibreHardwareMonitor -p LibreHardwareMonitor.zip -D lhm_download
+          python -c "import zipfile,os;z=zipfile.ZipFile('lhm_download/LibreHardwareMonitor.zip');os.makedirs('lib/lhm',exist_ok=True);[open(os.path.join('lib/lhm',os.path.basename(n)),'wb').write(z.read(n)) for n in z.namelist() if n.lower().endswith('.dll')]"
+          ls lib/lhm
+
       - name: Build
         if: steps.version.outputs.exists == 'false'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
-          pyinstaller --noconfirm --onefile --noconsole --name LiteRGB --collect-all libusb_package --add-data "lib;lib" --add-data "assets;assets" --icon assets/icon.ico main.py
+          pyinstaller --noconfirm --onefile --noconsole --name LiteRGB --collect-all libusb_package --collect-all pythonnet --collect-all clr_loader --hidden-import clr --add-data "lib;lib" --add-data "assets;assets" --icon assets/icon.ico main.py
+
+      - name: Self test
+        if: steps.version.outputs.exists == 'false'
+        shell: pwsh
+        run: |
+          Start-Process -FilePath dist\LiteRGB.exe -ArgumentList '--selftest', "$PWD\selftest.txt" -Wait
+          $result = Get-Content selftest.txt
+          Write-Output "Self test: $result"
+          if ($result -match '^(missing_lib|missing_pythonnet)') { exit 1 }
 
       - uses: softprops/action-gh-release@v2
         if: steps.version.outputs.exists == 'false'

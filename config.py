@@ -8,6 +8,9 @@ PATH = os.path.join(FOLDER, "config.json")
 DEFAULTS = {
     "language": "",
     "theme": "system",
+    "start_minimized": False,
+    "close_to_tray": True,
+    "leds_off_on_sleep": True,
     "lights_on": True,
     "brightness": 100,
     "effect": {"type": "wave", "color1": "#00a2ff", "color2": "#ff0080", "speed": 1.0},

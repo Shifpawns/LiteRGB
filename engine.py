@@ -39,6 +39,29 @@ class Engine:
         self.errors = {}
         self.running = False
         self.save_request = None
+        self.paused = False
+        self.blackout_request = None
+
+    def blackout(self, timeout=3.0):
+        done = threading.Event()
+        self.blackout_request = done
+        done.wait(timeout)
+
+    def resume(self):
+        for device in self.devices.values():
+            device.last_colors = None
+            device.applied = None
+        self.paused = False
+
+    def do_blackout(self):
+        for key, device in list(self.devices.items()):
+            if not device.positions:
+                continue
+            try:
+                device.send([(0, 0, 0)] * len(device.positions))
+            except Exception as error:
+                logging.info("Blackout failed for %s: %s", key, error)
+        self.paused = True
 
     def start(self):
         self.running = True
@@ -136,6 +159,15 @@ class Engine:
         while self.running:
             now = time.time()
             t = now - start
+
+            if self.blackout_request:
+                done, self.blackout_request = self.blackout_request, None
+                self.do_blackout()
+                done.set()
+
+            if self.paused:
+                time.sleep(0.1)
+                continue
 
             for key, device in list(self.devices.items()):
                 if device.hardware_only:

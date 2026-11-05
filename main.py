@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageTk
 import psutil
 
 import config as cfg
+import power
 import theme
 import i18n
 from i18n import t as T
@@ -25,7 +26,7 @@ from sensors import Sensors
 
 APP = "LiteRGB"
 PREVIEW = 220
-VERSION = "1.14"
+VERSION = "1.15"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -110,6 +111,23 @@ def running_conflicts():
     return sorted(names)
 
 
+def value_slider(parent, var, start, end, text, command, length=200):
+    frame = ttk.Frame(parent)
+    ttk.Scale(frame, from_=start, to=end, variable=var, length=length, command=lambda v: command()).pack(side="left")
+    label = ttk.Label(frame, width=6, anchor="e")
+    label.pack(side="left", padx=(6, 0))
+
+    def update(*args):
+        try:
+            label.configure(text=text(float(var.get())))
+        except (tk.TclError, ValueError):
+            pass
+
+    var.trace_add("write", update)
+    update()
+    return frame
+
+
 class ColorButton(tk.Button):
     def __init__(self, parent, on_change):
         super().__init__(parent, width=6, relief="groove", command=self.pick)
@@ -150,7 +168,7 @@ class App:
             pass
         self.root.geometry("860x520")
         self.root.minsize(820, 500)
-        self.root.protocol("WM_DELETE_WINDOW", self.hide)
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         notebook = ttk.Notebook(self.root)
         self.notebook = notebook
@@ -161,8 +179,13 @@ class App:
         self.build_profiles(notebook)
         self.build_settings(notebook)
 
-        self.status = ttk.Label(self.root, anchor="w")
-        self.status.pack(fill="x", padx=10, pady=6)
+        bar = ttk.Frame(self.root)
+        bar.pack(fill="x", padx=10, pady=6)
+        self.status = ttk.Label(bar, anchor="w")
+        self.status.pack(side="left", fill="x", expand=True)
+        self.lights_var = tk.BooleanVar(value=self.config["lights_on"])
+        ttk.Checkbutton(bar, text=T("Alle RGB aan"), variable=self.lights_var,
+                        command=self.apply_brightness).pack(side="right")
 
         self.engine.start()
         self.start_tray()
@@ -176,8 +199,25 @@ class App:
         if conflicts:
             messagebox.showwarning(APP, T("Sluit deze programma's, anders vechten ze om je apparaten:") + "\n\n"
                                    + "\n".join(conflicts))
-        if start_hidden:
+        power.watch(self.on_sleep, self.on_resume)
+        if start_hidden or self.config.get("start_minimized", False):
             self.root.withdraw()
+
+    def on_sleep(self):
+        if self.config.get("leds_off_on_sleep", True):
+            logging.info("Sleep or shutdown: turning LEDs off")
+            self.engine.blackout()
+
+    def on_resume(self):
+        if self.engine.paused:
+            logging.info("Resumed from sleep")
+            self.engine.resume()
+
+    def on_close(self):
+        if self.config.get("close_to_tray", True) and self.tray:
+            self.hide()
+        else:
+            self.quit()
 
     def save(self):
         cfg.save(self.config)
@@ -189,7 +229,7 @@ class App:
         left = ttk.Frame(tab)
         left.pack(side="left", fill="y")
         ttk.Label(left, text=T("Apparaten")).pack(anchor="w")
-        self.device_list = tk.Listbox(left, width=28, exportselection=False, activestyle="none")
+        self.device_list = tk.Listbox(left, width=34, exportselection=False, activestyle="none")
         theme.style_listbox(self.device_list)
         self.device_list.pack(fill="y", expand=True, pady=(4, 0))
         self.device_list.bind("<<ListboxSelect>>", lambda e: self.load_selection())
@@ -202,10 +242,11 @@ class App:
 
         self.enabled_var = tk.BooleanVar(value=True)
         self.own_var = tk.BooleanVar(value=False)
-        self.enabled_check = ttk.Checkbutton(right, text=T("Ingeschakeld"), variable=self.enabled_var,
-                                             command=self.apply_effect)
+        self.enabled_check = ttk.Checkbutton(right, text=T("Verlichting van dit apparaat aan"),
+                                             variable=self.enabled_var,
+                                             command=lambda: self.apply_effect(auto_own=False))
         self.own_check = ttk.Checkbutton(right, text=T("Eigen effect (niet synchroon)"), variable=self.own_var,
-                                         command=self.apply_effect)
+                                         command=lambda: self.apply_effect(auto_own=False))
         self.enabled_check.grid(row=1, column=0, columnspan=3, sticky="w")
         self.own_check.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
@@ -216,35 +257,49 @@ class App:
         self.effect_box.grid(row=3, column=1, columnspan=2, sticky="w")
         self.effect_box.bind("<<ComboboxSelected>>", lambda e: self.apply_effect())
 
-        ttk.Label(right, text=T("Kleuren")).grid(row=4, column=0, sticky="w", pady=4)
+        self.colors_label = ttk.Label(right, text=T("Kleuren"))
+        self.colors_label.grid(row=4, column=0, sticky="w", pady=4)
         self.color1 = ColorButton(right, self.apply_effect)
         self.color2 = ColorButton(right, self.apply_effect)
         self.color1.grid(row=4, column=1, sticky="w")
         self.color2.grid(row=4, column=2, sticky="w")
 
-        ttk.Label(right, text=T("Snelheid")).grid(row=5, column=0, sticky="w", pady=4)
+        self.speed_label = ttk.Label(right, text=T("Snelheid"))
+        self.speed_label.grid(row=5, column=0, sticky="w", pady=4)
         self.speed_var = tk.DoubleVar(value=1.0)
-        ttk.Scale(right, from_=0.1, to=4.0, variable=self.speed_var, length=200,
-                  command=lambda v: self.apply_effect()).grid(row=5, column=1, columnspan=2, sticky="w")
+        self.speed_frame = value_slider(right, self.speed_var, 0.1, 4.0, lambda v: f"{v:.1f}×", self.apply_effect)
+        self.speed_frame.grid(row=5, column=1, columnspan=2, sticky="w")
 
         ttk.Label(right, text=T("Verzadiging")).grid(row=6, column=0, sticky="w", pady=4)
         self.saturation_var = tk.IntVar(value=100)
-        ttk.Scale(right, from_=0, to=100, variable=self.saturation_var, length=200,
-                  command=lambda v: self.apply_effect()).grid(row=6, column=1, columnspan=2, sticky="w")
+        value_slider(right, self.saturation_var, 0, 100, lambda v: f"{v:.0f}%", self.apply_effect).grid(
+            row=6, column=1, columnspan=2, sticky="w")
 
         ttk.Separator(right).grid(row=7, column=0, columnspan=3, sticky="ew", pady=12)
 
         ttk.Label(right, text=T("Helderheid (alles)")).grid(row=8, column=0, sticky="w")
         self.brightness_var = tk.IntVar(value=self.config["brightness"])
-        ttk.Scale(right, from_=0, to=100, variable=self.brightness_var, length=200,
-                  command=lambda v: self.apply_brightness()).grid(row=8, column=1, columnspan=2, sticky="w")
-
-        self.lights_var = tk.BooleanVar(value=self.config["lights_on"])
-        ttk.Checkbutton(right, text=T("Verlichting aan"), variable=self.lights_var,
-                        command=self.apply_brightness).grid(row=9, column=0, columnspan=3, sticky="w", pady=8)
+        value_slider(right, self.brightness_var, 0, 100, lambda v: f"{v:.0f}%", self.apply_brightness).grid(
+            row=8, column=1, columnspan=2, sticky="w")
 
         self.save_button = ttk.Button(right, text=T("Opslaan in apparaten"), command=self.save_to_devices)
-        self.save_button.grid(row=10, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self.save_button.grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
+
+    def update_controls(self):
+        kind = self.selected_kind()
+        colors = kind in ("static", "breathing", "gradient")
+        animated = kind not in ("off", "static")
+        for widget, visible in ((self.colors_label, colors), (self.color1, colors),
+                                (self.color2, kind == "gradient"),
+                                (self.speed_label, animated), (self.speed_frame, animated)):
+            if visible:
+                widget.grid()
+            else:
+                widget.grid_remove()
+        self.colors_label.configure(text=T("Kleuren") if kind == "gradient" else T("Kleur"))
+
+    def selected_kind(self):
+        return next((k for k, v in effects.EFFECTS.items() if T(v) == self.effect_var.get()), "static")
 
     def build_lcd(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
@@ -266,8 +321,8 @@ class App:
 
         ttk.Label(tab, text=T("Helderheid")).grid(row=4, column=0, sticky="w", pady=4)
         self.lcd_brightness = tk.IntVar(value=lcd["brightness"])
-        ttk.Scale(tab, from_=0, to=100, variable=self.lcd_brightness, length=200,
-                  command=lambda v: self.apply_lcd()).grid(row=4, column=1, sticky="w")
+        value_slider(tab, self.lcd_brightness, 0, 100, lambda v: f"{v:.0f}%", self.apply_lcd, 180).grid(
+            row=4, column=1, columnspan=2, sticky="w")
 
         ttk.Label(tab, text=T("Draaien")).grid(row=5, column=0, sticky="w", pady=4)
         self.rotation_var = tk.StringVar(value=str(lcd["rotation"]))
@@ -290,9 +345,8 @@ class App:
         ttk.Label(tab, text=T("Blijft het scherm zwart? Probeer rgb565."), foreground=theme.MUTED).grid(
             row=8, column=1, columnspan=2, sticky="w")
 
-        cpu_note = T("CPU-temperatuur: actief") if self.sensors.computer else \
-            T("CPU-temperatuur: niet beschikbaar (zie README)")
-        ttk.Label(tab, text=cpu_note, foreground=theme.MUTED).grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
+        self.cpu_label = ttk.Label(tab, foreground=theme.MUTED, wraplength=430, justify="left")
+        self.cpu_label.grid(row=9, column=0, columnspan=3, sticky="w", pady=(16, 0))
 
         side = ttk.Frame(tab, padding=(20, 0, 0, 0))
         side.grid(row=0, column=3, rowspan=10, sticky="n")
@@ -310,8 +364,8 @@ class App:
         zoom_row.pack()
         ttk.Label(zoom_row, text=T("Zoom")).pack(side="left")
         self.zoom_var = tk.DoubleVar(value=lcd.get("zoom", 1.0))
-        ttk.Scale(zoom_row, from_=0.3, to=4.0, variable=self.zoom_var, length=150,
-                  command=lambda v: self.preview_changed()).pack(side="left", padx=6)
+        value_slider(zoom_row, self.zoom_var, 0.3, 4.0, lambda v: f"{v:.1f}×", self.preview_changed, 130).pack(
+            side="left", padx=6)
         ttk.Button(side, text=T("Reset"), command=self.reset_view).pack(pady=6)
         self.offset_x = lcd.get("offset_x", 0.0)
         self.offset_y = lcd.get("offset_y", 0.0)
@@ -330,7 +384,7 @@ class App:
         return self.preview_source[1]
 
     def draw_preview(self):
-        rotation = int(self.rotation_var.get())
+        rotation = 0
         mode = self.lcd_mode.get()
         frame = self.preview_frame()
         if mode == "image" and frame is not None:
@@ -352,10 +406,7 @@ class App:
 
     def preview_drag(self, event):
         x, y, ox, oy = self.drag_start
-        rotation = int(self.rotation_var.get())
         dx, dy = (event.x - x) / PREVIEW, (event.y - y) / PREVIEW
-        for _ in range(rotation // 90):
-            dx, dy = dy, -dx
         self.offset_x = max(-2.0, min(2.0, ox + dx))
         self.offset_y = max(-2.0, min(2.0, oy + dy))
         self.draw_preview()
@@ -434,57 +485,87 @@ class App:
 
         self.profile_list = tk.Listbox(tab, width=30, height=12, exportselection=False)
         theme.style_listbox(self.profile_list)
-        self.profile_list.grid(row=0, column=0, rowspan=5, sticky="ns")
+        self.profile_list.grid(row=0, column=0, rowspan=8, sticky="ns")
+
+        ttk.Label(tab, text=T("Nieuw profiel")).grid(row=0, column=1, padx=12, sticky="w")
         self.profile_name = tk.StringVar()
-        ttk.Entry(tab, textvariable=self.profile_name, width=24).grid(row=0, column=1, padx=10, sticky="w")
-        ttk.Button(tab, text=T("Huidige opslaan"), command=self.save_profile).grid(row=1, column=1, padx=10, sticky="ew")
-        ttk.Button(tab, text=T("Laden"), command=self.load_profile).grid(row=2, column=1, padx=10, sticky="ew")
-        ttk.Button(tab, text=T("Verwijderen"), command=self.delete_profile).grid(row=3, column=1, padx=10, sticky="ew")
+        ttk.Entry(tab, textvariable=self.profile_name, width=26).grid(row=1, column=1, padx=12, sticky="w")
+        ttk.Button(tab, text=T("Opslaan als nieuw"), command=self.save_profile).grid(
+            row=2, column=1, padx=12, pady=(4, 16), sticky="ew")
+
+        ttk.Label(tab, text=T("Geselecteerd profiel")).grid(row=3, column=1, padx=12, sticky="w")
+        ttk.Button(tab, text=T("Laden"), command=self.load_profile).grid(row=4, column=1, padx=12, pady=2, sticky="ew")
+        ttk.Button(tab, text=T("Bijwerken met huidige instellingen"), command=self.update_profile).grid(
+            row=5, column=1, padx=12, pady=2, sticky="ew")
+        ttk.Button(tab, text=T("Verwijderen"), command=self.delete_profile).grid(
+            row=6, column=1, padx=12, pady=2, sticky="ew")
         self.refresh_profiles()
 
     def build_settings(self, notebook):
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text=T("Instellingen"))
+
         self.autostart_var = tk.BooleanVar(value=autostart_enabled())
         ttk.Checkbutton(tab, text=T("Starten met Windows"), variable=self.autostart_var,
                         command=lambda: set_autostart(self.autostart_var.get())).grid(row=0, column=0, sticky="w")
-        note = T("Draait als administrator: autostart met CPU-temperatuur.") if is_admin() else \
-            T("Niet als administrator: CPU-temperatuur werkt alleen als administrator.")
-        ttk.Label(tab, text=note, foreground=theme.MUTED).grid(row=1, column=0, sticky="w", pady=(4, 12))
-        ttk.Button(tab, text=T("Apparaten opnieuw zoeken"), command=self.rescan).grid(row=2, column=0, sticky="w")
-        ttk.Button(tab, text=T("Logbestand openen"), command=lambda: os.startfile(LOG_PATH)).grid(
-            row=3, column=0, sticky="w", pady=6)
+        self.minimized_var = tk.BooleanVar(value=self.config.get("start_minimized", False))
+        ttk.Checkbutton(tab, text=T("Geminimaliseerd starten (alleen in systeemvak)"), variable=self.minimized_var,
+                        command=lambda: self.set_option("start_minimized", self.minimized_var.get())).grid(
+            row=1, column=0, sticky="w", pady=(4, 0))
+        self.close_tray_var = tk.BooleanVar(value=self.config.get("close_to_tray", True))
+        ttk.Checkbutton(tab, text=T("Bij sluiten naar systeemvak (anders afsluiten)"), variable=self.close_tray_var,
+                        command=lambda: self.set_option("close_to_tray", self.close_tray_var.get())).grid(
+            row=2, column=0, sticky="w", pady=(4, 0))
+        self.sleep_var = tk.BooleanVar(value=self.config.get("leds_off_on_sleep", True))
+        ttk.Checkbutton(tab, text=T("Leds uit bij slaapstand en afsluiten"), variable=self.sleep_var,
+                        command=lambda: self.set_option("leds_off_on_sleep", self.sleep_var.get())).grid(
+            row=3, column=0, sticky="w", pady=(4, 0))
+        note = T("Draait als administrator.") if is_admin() else \
+            T("Niet als administrator: CPU-temperatuur en RAM werken alleen als administrator.")
+        ttk.Label(tab, text=note, foreground=theme.MUTED).grid(row=4, column=0, sticky="w", pady=(8, 12))
+
+        buttons = ttk.Frame(tab)
+        buttons.grid(row=5, column=0, sticky="w")
+        ttk.Button(buttons, text=T("Apparaten opnieuw zoeken"), command=self.rescan).pack(side="left")
+        ttk.Button(buttons, text=T("Logbestand openen"), command=lambda: os.startfile(LOG_PATH)).pack(
+            side="left", padx=8)
+
+        ttk.Separator(tab).grid(row=6, column=0, sticky="ew", pady=12)
+        version_row = ttk.Frame(tab)
+        version_row.grid(row=7, column=0, sticky="w")
+        ttk.Label(version_row, text=T("Versie {version}", version=VERSION)).pack(side="left")
+        self.update_button = ttk.Button(version_row, text=T("Zoeken naar updates"), command=self.check_updates)
+        self.update_button.pack(side="left", padx=12)
+        self.update_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=560, justify="left")
+        self.update_status.grid(row=8, column=0, sticky="w", pady=(4, 0))
+        self.update_info = None
+        self.update_result = None
 
         language_row = ttk.Frame(tab)
-        language_row.grid(row=8, column=0, sticky="w", pady=(16, 0))
-        ttk.Label(language_row, text="Language" if i18n.LANG == "en" else "Taal / Language").pack(side="left")
+        language_row.grid(row=9, column=0, sticky="w", pady=(16, 0))
+        ttk.Label(language_row, text="Language" if i18n.LANG == "en" else "Taal / Language", width=16).pack(side="left")
         names = {"nl": "Nederlands", "en": "English"}
         self.language_var = tk.StringVar(value=names.get(self.config["language"], "Nederlands"))
         language = ttk.Combobox(language_row, textvariable=self.language_var, values=list(names.values()),
                                 state="readonly", width=12)
-        language.pack(side="left", padx=8)
+        language.pack(side="left")
         language.bind("<<ComboboxSelected>>", lambda e: self.change_language(
             next(k for k, v in names.items() if v == self.language_var.get())))
 
         theme_row = ttk.Frame(tab)
-        theme_row.grid(row=9, column=0, sticky="w", pady=(8, 0))
-        ttk.Label(theme_row, text=T("Thema")).pack(side="left")
+        theme_row.grid(row=10, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(theme_row, text=T("Thema"), width=16).pack(side="left")
         themes = {"system": T("Systeem"), "light": T("Licht"), "dark": T("Donker")}
         self.theme_var = tk.StringVar(value=themes.get(self.config.get("theme", "system")))
         theme_box = ttk.Combobox(theme_row, textvariable=self.theme_var, values=list(themes.values()),
                                  state="readonly", width=12)
-        theme_box.pack(side="left", padx=8)
+        theme_box.pack(side="left")
         theme_box.bind("<<ComboboxSelected>>", lambda e: self.change_theme(
             next(k for k, v in themes.items() if v == self.theme_var.get())))
 
-        ttk.Separator(tab).grid(row=4, column=0, sticky="ew", pady=12)
-        ttk.Label(tab, text=T("Versie {version}", version=VERSION)).grid(row=5, column=0, sticky="w")
-        self.update_button = ttk.Button(tab, text=T("Zoeken naar updates"), command=self.check_updates)
-        self.update_button.grid(row=6, column=0, sticky="w", pady=6)
-        self.update_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=520, justify="left")
-        self.update_status.grid(row=7, column=0, sticky="w")
-        self.update_info = None
-        self.update_result = None
+    def set_option(self, key, value):
+        self.config[key] = value
+        self.save()
 
     def change_language(self, code):
         if code == self.config.get("language"):
@@ -594,7 +675,7 @@ class App:
         self.show_tab(self.lcd_tab, "nzxt_kraken" in self.engine.devices)
         self.show_tab(self.ajazz_tab, "ajazz_ak820" in self.engine.devices)
         keys = self.device_keys()
-        names = [T("Alle apparaten (sync)")] + [self.engine.devices[k].name for k in keys[1:]]
+        names = [T("Alle apparaten (sync)")] + [self.device_label(k) for k in keys[1:]]
         if list(self.device_list.get(0, "end")) != names:
             current = self.selected
             self.device_list.delete(0, "end")
@@ -603,6 +684,9 @@ class App:
             index = keys.index(current) if current in keys else 0
             self.device_list.selection_set(index)
 
+        if hasattr(self, "cpu_label"):
+            self.cpu_label.configure(text=self.cpu_text())
+
         count = len(self.engine.devices)
         text = T("{count} apparaten verbonden", count=count)
         if self.engine.errors:
@@ -610,6 +694,31 @@ class App:
         if self.update_info:
             text += "  ·  " + T("update {tag} beschikbaar (Instellingen)", tag=self.update_info[0])
         self.status.configure(text=text)
+
+    def device_label(self, key):
+        settings = self.config["devices"].get(key, {})
+        name = self.engine.devices[key].name
+        if not settings.get("enabled", True):
+            return f"{name}  ·  {T('uit')}"
+        if settings.get("own_effect"):
+            return f"{name}  ·  {T('eigen effect')}"
+        return name
+
+    def cpu_text(self):
+        status = self.sensors.status
+        if status == "active":
+            return T("CPU-temperatuur: actief")
+        if status == "waiting":
+            return T("CPU-temperatuur: wordt gestart...")
+        if status == "missing_lib":
+            return T("CPU-temperatuur: LibreHardwareMonitor ontbreekt in deze versie.")
+        if status == "missing_pythonnet":
+            return T("CPU-temperatuur: pythonnet ontbreekt ({error}).", error=self.sensors.error)
+        if status == "no_value":
+            if not is_admin():
+                return T("CPU-temperatuur: start LiteRGB als administrator.")
+            return T("CPU-temperatuur: geen waarde. Installeer de PawnIO-driver via pawnio.eu en herstart.")
+        return T("CPU-temperatuur: fout: {error}", error=self.sensors.error)
 
     def poll(self):
         self.refresh_status()
@@ -650,18 +759,22 @@ class App:
         self.color2.set(effect.get("color2", "#ff0080"))
         self.speed_var.set(effect.get("speed", 1.0))
         self.saturation_var.set(effect.get("saturation", 100))
+        self.update_controls()
         self.loading = False
 
-    def apply_effect(self):
+    def apply_effect(self, auto_own=True):
         if self.loading:
             return
-        kind = next((k for k, v in effects.EFFECTS.items() if T(v) == self.effect_var.get()), "static")
+        self.update_controls()
+        kind = self.selected_kind()
         effect = {"type": kind, "color1": self.color1.value, "color2": self.color2.value,
                   "speed": round(self.speed_var.get(), 2), "saturation": int(self.saturation_var.get())}
         settings = self.current_settings()
         if settings is None:
             self.config["effect"] = effect
         else:
+            if auto_own and not self.own_var.get():
+                self.own_var.set(True)
             settings["enabled"] = self.enabled_var.get()
             settings["own_effect"] = self.own_var.get()
             if settings["own_effect"]:
@@ -705,8 +818,22 @@ class App:
         return self.profile_list.get(selection[0]) if selection else None
 
     def save_profile(self):
-        name = self.profile_name.get().strip() or self.selected_profile()
+        name = self.profile_name.get().strip()
         if not name:
+            messagebox.showinfo(APP, T("Vul eerst een naam in voor het nieuwe profiel."))
+            return
+        if name in self.config["profiles"] and not messagebox.askyesno(
+                APP, T("Profiel '{name}' bestaat al. Overschrijven?", name=name)):
+            return
+        cfg.save_profile(self.config, name)
+        self.save()
+        self.profile_name.set("")
+        self.refresh_profiles()
+
+    def update_profile(self):
+        name = self.selected_profile()
+        if not name:
+            messagebox.showinfo(APP, T("Selecteer eerst een profiel in de lijst."))
             return
         cfg.save_profile(self.config, name)
         self.save()
@@ -818,7 +945,16 @@ class App:
 LOG_PATH = os.path.join(cfg.FOLDER, "litergb.log")
 
 
+def selftest(path):
+    sensors = Sensors(os.path.join(base_folder(), "lib"), start=False)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"{sensors.status} {sensors.error}\n")
+
+
 def main():
+    if "--selftest" in sys.argv:
+        selftest(sys.argv[sys.argv.index("--selftest") + 1])
+        return
     os.makedirs(cfg.FOLDER, exist_ok=True)
     logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
