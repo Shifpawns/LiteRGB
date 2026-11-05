@@ -18,7 +18,7 @@ from engine import Engine
 from sensors import Sensors
 
 APP = "LiteRGB"
-VERSION = "1.9"
+VERSION = "1.10"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -590,7 +590,10 @@ class App:
         except Exception as error:
             logging.warning("Tray icon unavailable: %s", error)
             return
-        image = Image.open(asset("icon.png")).resize((64, 64), Image.LANCZOS)
+        try:
+            image = Image.open(asset("icon.png")).resize((64, 64), Image.LANCZOS)
+        except OSError:
+            image = Image.new("RGBA", (64, 64), (0, 162, 255, 255))
         self.tray = pystray.Icon(APP, image, APP, self.tray_menu())
         self.tray.run_detached()
 

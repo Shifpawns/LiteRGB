@@ -67,5 +67,7 @@ def install(url):
         os.remove(old)
     os.replace(exe, old)
     os.replace(new, exe)
-    subprocess.Popen([exe, "--after-update"], close_fds=True,
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_MEI", "_PYI"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    subprocess.Popen([exe, "--after-update"], close_fds=True, env=env,
                      creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
