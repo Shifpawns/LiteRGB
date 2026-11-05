@@ -25,7 +25,7 @@ Effecten: uit, statisch, ademen, kleurcyclus, regenboog golf, verloop. Per appar
 
 Download `LiteRGB.exe` bij de nieuwste release op https://github.com/Shifpawns/LiteRGB/releases en start hem. Python is dan niet nodig. Updates gaan via Instellingen > "Zoeken naar updates"; LiteRGB zoekt ook zelf bij het opstarten.
 
-Een nieuwe versie uitbrengen: verhoog `VERSION` in `main.py`, commit, en push een tag met dezelfde naam (bijvoorbeeld `v1.9`). GitHub bouwt dan zelf de exe.
+Een nieuwe versie uitbrengen: verhoog `VERSION` in `main.py` en push naar `main`. GitHub maakt dan zelf de tag, bouwt de exe en zet hem bij de releases.
 
 ## Installeren vanuit de broncode
 
