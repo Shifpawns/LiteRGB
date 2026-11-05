@@ -1,0 +1,7 @@
+hidapi
+pyusb
+libusb-package
+pillow
+numpy
+psutil
+pystray

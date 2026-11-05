@@ -1,0 +1,71 @@
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+REPO = "Shifpawns/LiteRGB"
+ASSET = "LiteRGB.exe"
+
+
+def version_tuple(text):
+    parts = []
+    for piece in text.lstrip("vV").split("."):
+        digits = "".join(c for c in piece if c.isdigit())
+        parts.append(int(digits or 0))
+    return tuple(parts)
+
+
+def latest_release():
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{REPO}/releases/latest",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "LiteRGB-updater"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        release = json.load(response)
+    url = next((a["browser_download_url"] for a in release.get("assets", []) if a["name"] == ASSET), None)
+    return release.get("tag_name", ""), url, release.get("body", "")
+
+
+def check(current):
+    tag, url, notes = latest_release()
+    if url and version_tuple(tag) > version_tuple(current):
+        return tag, url, notes
+    return None
+
+
+def is_frozen():
+    return getattr(sys, "frozen", False)
+
+
+def cleanup_old():
+    if not is_frozen():
+        return
+    old = sys.executable + ".old"
+    try:
+        if os.path.exists(old):
+            os.remove(old)
+    except OSError:
+        pass
+
+
+def install(url):
+    exe = sys.executable
+    new = exe + ".new"
+    old = exe + ".old"
+    request = urllib.request.Request(url, headers={"User-Agent": "LiteRGB-updater"})
+    with urllib.request.urlopen(request, timeout=60) as response, open(new, "wb") as f:
+        while True:
+            block = response.read(1 << 16)
+            if not block:
+                break
+            f.write(block)
+    if os.path.getsize(new) < 1_000_000:
+        os.remove(new)
+        raise OSError("download is onvolledig")
+    if os.path.exists(old):
+        os.remove(old)
+    os.replace(exe, old)
+    os.replace(new, exe)
+    subprocess.Popen([exe, "--after-update"], close_fds=True,
+                     creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
