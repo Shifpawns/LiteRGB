@@ -18,7 +18,7 @@ from engine import Engine
 from sensors import Sensors
 
 APP = "LiteRGB"
-VERSION = "1.8"
+VERSION = "1.9"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -36,6 +36,11 @@ def base_folder():
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def asset(name):
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "assets", name)
 
 
 def is_admin():
@@ -121,6 +126,10 @@ class App:
 
         self.root = tk.Tk()
         self.root.title(f"{APP} {VERSION}")
+        try:
+            self.root.iconbitmap(asset("icon.ico"))
+        except tk.TclError:
+            pass
         self.root.geometry("640x460")
         self.root.minsize(600, 420)
         self.root.protocol("WM_DELETE_WINDOW", self.hide)
@@ -577,14 +586,11 @@ class App:
     def start_tray(self):
         try:
             import pystray
-            from PIL import Image, ImageDraw
+            from PIL import Image
         except Exception as error:
             logging.warning("Tray icon unavailable: %s", error)
             return
-        image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        for i, color in enumerate([(255, 60, 60), (60, 220, 90), (60, 140, 255)]):
-            draw.ellipse([6 + i * 14, 6 + i * 14, 34 + i * 14, 34 + i * 14], fill=color)
+        image = Image.open(asset("icon.png")).resize((64, 64), Image.LANCZOS)
         self.tray = pystray.Icon(APP, image, APP, self.tray_menu())
         self.tray.run_detached()
 
