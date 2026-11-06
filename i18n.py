@@ -46,6 +46,7 @@ EN = {
     "Verwijderen": "Delete",
     "Instellingen": "Settings",
     "Starten met Windows": "Start with Windows",
+    "Als administrator, zonder UAC-melding": "As administrator, without UAC prompt",
     "Draait als administrator: autostart met CPU-temperatuur.": "Running as administrator: autostart with CPU temperature.",
     "Niet als administrator: CPU-temperatuur werkt alleen als administrator.":
         "Not running as administrator: CPU temperature only works as administrator.",

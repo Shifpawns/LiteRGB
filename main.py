@@ -21,6 +21,7 @@ import i18n
 from i18n import t as T
 import lcd as lcd_render
 import updater
+import autostart
 import effects
 from engine import Engine
 from sensors import Sensors
@@ -28,7 +29,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.21"
+VERSION = "1.22"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -65,43 +66,6 @@ def is_admin():
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:
         return False
-
-
-def launch_command():
-    if getattr(sys, "frozen", False):
-        return f'"{sys.executable}"'
-    pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-    return f'"{pythonw}" "{os.path.abspath(__file__)}" --tray'
-
-
-def autostart_enabled():
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
-            winreg.QueryValueEx(key, APP)
-            return True
-    except OSError:
-        pass
-    result = subprocess.run(["schtasks", "/Query", "/TN", APP], capture_output=True,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    return result.returncode == 0
-
-
-def set_autostart(enabled):
-    import winreg
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path, 0, winreg.KEY_SET_VALUE) as key:
-        try:
-            winreg.DeleteValue(key, APP)
-        except OSError:
-            pass
-        if enabled and not is_admin():
-            winreg.SetValueEx(key, APP, 0, winreg.REG_SZ, launch_command())
-    subprocess.run(["schtasks", "/Delete", "/TN", APP, "/F"], capture_output=True, creationflags=flags)
-    if enabled and is_admin():
-        subprocess.run(["schtasks", "/Create", "/TN", APP, "/TR", launch_command(), "/SC", "ONLOGON",
-                        "/RL", "HIGHEST", "/F"], capture_output=True, creationflags=flags)
 
 
 def running_conflicts():
@@ -192,6 +156,12 @@ class App:
         self.update_info = None
         self.loading = False
         self.tray = None
+        try:
+            self.autostart_mode = autostart.refresh(__file__)
+        except Exception as error:
+            logging.warning("Autostart check failed: %s", error)
+            self.autostart_mode = "off"
+        logging.info("Autostart: %s", self.autostart_mode)
 
         self.root = tk.Tk()
         theme.apply(self.root, self.config.get("theme", "system"))
@@ -618,9 +588,19 @@ class App:
         tab = ttk.Frame(notebook, padding=10)
         notebook.add(tab, text=T("Instellingen"))
 
-        self.autostart_var = tk.BooleanVar(value=autostart_enabled())
-        ttk.Checkbutton(tab, text=T("Starten met Windows"), variable=self.autostart_var,
-                        command=lambda: set_autostart(self.autostart_var.get())).grid(row=0, column=0, sticky="w")
+        current = self.autostart_mode
+        start_row = ttk.Frame(tab)
+        start_row.grid(row=0, column=0, sticky="w")
+        self.autostart_var = tk.BooleanVar(value=current != "off")
+        ttk.Checkbutton(start_row, text=T("Starten met Windows"), variable=self.autostart_var,
+                        command=self.change_autostart).pack(side="left")
+        self.autostart_admin_var = tk.BooleanVar(value=current == "admin")
+        self.autostart_admin_check = ttk.Checkbutton(
+            start_row, text=T("Als administrator, zonder UAC-melding"), variable=self.autostart_admin_var,
+            command=self.change_autostart)
+        self.autostart_admin_check.pack(side="left", padx=(16, 0))
+        if current == "off":
+            self.autostart_admin_check.state(["disabled"])
         self.minimized_var = tk.BooleanVar(value=self.config.get("start_minimized", False))
         ttk.Checkbutton(tab, text=T("Geminimaliseerd starten (alleen in systeemvak)"), variable=self.minimized_var,
                         command=lambda: self.set_option("start_minimized", self.minimized_var.get())).grid(
@@ -708,6 +688,38 @@ class App:
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
         subprocess.Popen(command + ["--after-update"], env=env, close_fds=True)
         self.root.destroy()
+
+    def change_autostart(self):
+        wanted = "off"
+        if self.autostart_var.get():
+            wanted = "admin" if self.autostart_admin_var.get() else "normal"
+        self.autostart_admin_check.state(["!disabled"] if wanted != "off" else ["disabled"])
+        try:
+            if autostart.needs_elevation(wanted):
+                if not autostart.apply_elevated(wanted, __file__):
+                    self.sync_autostart_checks()
+                    return
+                self.root.after(1500, lambda: self.wait_for_autostart(wanted, 10))
+                return
+            autostart.apply(wanted, __file__)
+        except Exception as error:
+            logging.warning("Autostart failed: %s", error)
+            messagebox.showerror(APP, T("Mislukt: {error}", error=error))
+        self.sync_autostart_checks()
+
+    def wait_for_autostart(self, wanted, tries):
+        if autostart.mode() != wanted and tries > 0:
+            self.root.after(1000, lambda: self.wait_for_autostart(wanted, tries - 1))
+            return
+        self.sync_autostart_checks()
+
+    def sync_autostart_checks(self):
+        current = autostart.mode()
+        self.autostart_mode = current
+        self.autostart_var.set(current != "off")
+        if current != "off":
+            self.autostart_admin_var.set(current == "admin")
+        self.autostart_admin_check.state(["!disabled"] if current != "off" else ["disabled"])
 
     def check_updates(self, silent=False):
         if self.update_info:
@@ -1076,6 +1088,14 @@ def main():
         selftest(sys.argv[sys.argv.index("--selftest") + 1])
         return
     os.makedirs(cfg.FOLDER, exist_ok=True)
+    if "--set-autostart" in sys.argv:
+        logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
+                            format="%(asctime)s %(levelname)s %(message)s")
+        try:
+            autostart.apply(sys.argv[sys.argv.index("--set-autostart") + 1], __file__)
+        except Exception as error:
+            logging.warning("Autostart failed: %s", error)
+        return
     logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
 
@@ -1095,7 +1115,8 @@ def main():
     except Exception:
         pass
 
-    logging.info("LiteRGB %s started from %s", VERSION, base_folder())
+    logging.info("LiteRGB %s started from %s%s, admin: %s", VERSION, base_folder(),
+                 " (autostart)" if "--autostart" in sys.argv else "", is_admin())
     App("--tray" in sys.argv).run()
 
 
