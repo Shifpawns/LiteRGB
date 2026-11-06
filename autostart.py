@@ -26,9 +26,9 @@ def program(script):
     return pythonw, [os.path.abspath(script)]
 
 
-def command_line(script):
+def command_line(script, extra=()):
     exe, args = program(script)
-    return subprocess.list2cmdline([exe] + args + ["--autostart"])
+    return subprocess.list2cmdline([exe] + args + ["--autostart", *extra])
 
 
 def schtasks(*args):
@@ -39,22 +39,35 @@ def task_exists():
     return schtasks("/Query", "/TN", APP).returncode == 0
 
 
-def run_key_exists():
+def run_key_value():
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-            winreg.QueryValueEx(key, APP)
-            return True
+            return winreg.QueryValueEx(key, APP)[0]
+    except OSError:
+        return None
+
+
+def old_logon_task():
+    result = schtasks("/Query", "/TN", APP, "/XML")
+    return result.returncode == 0 and "LogonTrigger" in result.stdout
+
+
+def disabled_in_windows():
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, APPROVED_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, APP)
+            return bool(value) and value[0] & 1 == 1
     except OSError:
         return False
 
 
 def mode():
-    if task_exists():
-        return "admin"
-    if run_key_exists():
-        return "normal"
-    return "off"
+    value = run_key_value()
+    if not value or disabled_in_windows():
+        return "off"
+    return "admin" if "--launch-task" in value else "normal"
 
 
 def remove_run_key():
@@ -67,11 +80,11 @@ def remove_run_key():
             pass
 
 
-def write_run_key(script):
+def write_run_key(script, admin):
     import winreg
-    remove_run_key()
+    command = command_line(script, ["--launch-task"] if admin else [])
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
-        winreg.SetValueEx(key, APP, 0, winreg.REG_SZ, command_line(script))
+        winreg.SetValueEx(key, APP, 0, winreg.REG_SZ, command)
 
 
 def task_xml(script):
@@ -79,13 +92,6 @@ def task_xml(script):
     user = f'{os.environ.get("USERDOMAIN", "")}\\{os.environ.get("USERNAME", "")}'
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <UserId>{escape(user)}</UserId>
-      <Delay>PT5S</Delay>
-    </LogonTrigger>
-  </Triggers>
   <Principals>
     <Principal id="Author">
       <UserId>{escape(user)}</UserId>
@@ -126,17 +132,17 @@ def write_task(script):
 
 def apply(wanted, script):
     remove_run_key()
-    if task_exists():
+    if wanted != "admin" and is_admin() and task_exists():
         schtasks("/Delete", "/TN", APP, "/F")
-    if wanted == "normal":
-        write_run_key(script)
-    elif wanted == "admin":
+    if wanted == "admin":
         write_task(script)
+    if wanted != "off":
+        write_run_key(script, wanted == "admin")
     logging.info("Autostart set to %s", wanted)
 
 
 def needs_elevation(wanted):
-    return not is_admin() and (wanted == "admin" or task_exists())
+    return not is_admin() and (wanted == "admin" or old_logon_task())
 
 
 def apply_elevated(wanted, script):
@@ -149,10 +155,14 @@ def apply_elevated(wanted, script):
 def refresh(script):
     current = mode()
     try:
-        if current == "normal":
-            write_run_key(script)
-        elif current == "admin" and is_admin():
+        if current == "admin" and is_admin():
             write_task(script)
+        if current != "off":
+            write_run_key(script, current == "admin")
     except Exception as error:
         logging.warning("Autostart refresh failed: %s", error)
     return current
+
+
+def launch_task():
+    return schtasks("/Run", "/TN", APP).returncode == 0

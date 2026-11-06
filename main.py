@@ -29,7 +29,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.22"
+VERSION = "1.23"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -1088,6 +1088,8 @@ def main():
         selftest(sys.argv[sys.argv.index("--selftest") + 1])
         return
     os.makedirs(cfg.FOLDER, exist_ok=True)
+    if "--launch-task" in sys.argv and not is_admin() and autostart.launch_task():
+        return
     if "--set-autostart" in sys.argv:
         logging.basicConfig(filename=LOG_PATH, level=logging.INFO,
                             format="%(asctime)s %(levelname)s %(message)s")
