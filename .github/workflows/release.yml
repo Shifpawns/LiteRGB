@@ -60,10 +60,14 @@ jobs:
           Write-Output "Self test: $result"
           if ($result -match '^(missing_lib|missing_pythonnet)') { exit 1 }
 
+      - name: Release notes
+        if: steps.version.outputs.exists == 'false'
+        run: python release_notes.py ${{ steps.version.outputs.tag }}
+
       - uses: softprops/action-gh-release@v2
         if: steps.version.outputs.exists == 'false'
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           files: dist/LiteRGB.exe
-          generate_release_notes: true
+          body_path: release_notes.md

@@ -29,7 +29,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.25"
+VERSION = "1.26"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -631,6 +631,7 @@ class App:
         ttk.Label(version_row, text=T("Versie {version}", version=VERSION)).pack(side="left")
         self.update_button = ttk.Button(version_row, text=T("Zoeken naar updates"), command=self.check_updates)
         self.update_button.pack(side="left", padx=12)
+        ttk.Button(version_row, text=T("Wat is er nieuw"), command=self.show_changelog).pack(side="left")
         self.update_status = ttk.Label(tab, foreground=theme.MUTED, wraplength=560, justify="left")
         self.update_status.grid(row=8, column=0, sticky="w", pady=(4, 0))
         self.update_info = None
@@ -756,7 +757,11 @@ class App:
             tag, url, notes = value
             self.update_info = (tag, url)
             self.update_button.configure(text=T("Bijwerken naar {tag}", tag=tag))
-            self.update_status.configure(text=notes.strip()[:400] or T("Versie {tag} is beschikbaar.", tag=tag))
+            self.update_status.configure(text=T("Versie {tag} is beschikbaar.", tag=tag))
+
+    def show_changelog(self):
+        from changelog_view import ChangelogWindow
+        ChangelogWindow(self, VERSION)
 
     def install_update(self):
         tag, url = self.update_info

@@ -27,6 +27,27 @@ def latest_release():
     return release.get("tag_name", ""), url, release.get("body", "")
 
 
+CHANGELOG_URL = f"https://raw.githubusercontent.com/{REPO}/main/CHANGELOG.md"
+RELEASES_URL = f"https://github.com/{REPO}/releases"
+
+
+def changelog():
+    request = urllib.request.Request(CHANGELOG_URL, headers={"User-Agent": "LiteRGB-updater"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        text = response.read().decode("utf-8")
+    sections = []
+    for block in text.split("\n## ")[1:]:
+        version, _, body = block.partition("\n")
+        sections.append((version.strip(), body.strip()))
+    return sections
+
+
+def changes_since(current):
+    sections = changelog()
+    newer = [s for s in sections if version_tuple(s[0]) > version_tuple(current)]
+    return newer or sections[:3]
+
+
 def check(current):
     tag, url, notes = latest_release()
     if url and version_tuple(tag) > version_tuple(current):

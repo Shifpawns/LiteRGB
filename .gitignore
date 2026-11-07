@@ -5,3 +5,4 @@ __pycache__/
 *.spec
 lib/lhm/
 version_info.txt
+release_notes.md
