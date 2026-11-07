@@ -29,7 +29,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.26"
+VERSION = "1.27"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -173,7 +173,7 @@ class App:
         self.root.geometry("920x520")
         self.root.minsize(900, 500)
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.protocol("WM_SAVE_YOURSELF", self.on_sleep)
+        self.root.protocol("WM_SAVE_YOURSELF", self.on_shutdown)
 
         notebook = ttk.Notebook(self.root)
         self.notebook = notebook
@@ -204,15 +204,23 @@ class App:
         if conflicts:
             messagebox.showwarning(APP, T("Sluit deze programma's, anders vechten ze om je apparaten:") + "\n\n"
                                    + "\n".join(conflicts))
-        power.watch(self.on_sleep, self.on_resume)
+        power.watch(self.on_sleep, self.on_resume, self.on_shutdown)
         if start_hidden or self.config.get("start_minimized", False):
             self.root.withdraw()
 
     def on_sleep(self):
-        if self.config.get("leds_off_on_sleep", True) and not self.engine.paused:
-            logging.info("Turning LEDs off")
-            self.engine.blackout()
-            logging.info("LEDs off")
+        if self.config.get("leds_off_on_sleep", True):
+            self.leds_off()
+
+    def on_shutdown(self):
+        self.leds_off()
+
+    def leds_off(self):
+        if self.engine.paused:
+            return
+        logging.info("Turning LEDs off")
+        self.engine.blackout()
+        logging.info("LEDs off")
 
     def on_resume(self):
         if self.engine.paused:
@@ -612,7 +620,7 @@ class App:
                         command=lambda: self.set_option("close_to_tray", self.close_tray_var.get())).grid(
             row=2, column=0, sticky="w", pady=(4, 0))
         self.sleep_var = tk.BooleanVar(value=self.config.get("leds_off_on_sleep", True))
-        ttk.Checkbutton(tab, text=T("Leds uit bij slaapstand en afsluiten"), variable=self.sleep_var,
+        ttk.Checkbutton(tab, text=T("Leds uit bij slaapstand"), variable=self.sleep_var,
                         command=lambda: self.set_option("leds_off_on_sleep", self.sleep_var.get())).grid(
             row=3, column=0, sticky="w", pady=(4, 0))
         note = T("Draait als administrator.") if is_admin() else \

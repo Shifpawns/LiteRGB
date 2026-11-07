@@ -29,7 +29,7 @@ class WNDCLASSW(ctypes.Structure):
     ]
 
 
-def watch(on_sleep, on_resume):
+def watch(on_sleep, on_resume, on_shutdown):
     try:
         user32 = ctypes.windll.user32
     except AttributeError:
@@ -60,11 +60,11 @@ def watch(on_sleep, on_resume):
                     return 1
                 if message == WM_QUERYENDSESSION:
                     logging.info("Windows is shutting down or logging off")
-                    on_sleep()
+                    on_shutdown()
                     return 1
                 if message == WM_ENDSESSION:
                     if wparam:
-                        on_sleep()
+                        on_shutdown()
                     return 0
             except Exception as error:
                 logging.warning("Power event failed: %s", error)

@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.27
+- LEDs always turn off when Windows shuts down. The setting now only applies to sleep.
+
 ## 1.26
 - New "What's new" button in Settings shows a summary of every update since your version.
 - The update message no longer shows a raw GitHub link.

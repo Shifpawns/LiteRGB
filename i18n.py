@@ -121,7 +121,7 @@ EN = {
     "Selecteer eerst een profiel in de lijst.": "Select a profile in the list first.",
     "Geminimaliseerd starten (alleen in systeemvak)": "Start minimized (tray only)",
     "Bij sluiten naar systeemvak (anders afsluiten)": "Minimize to tray on close (otherwise quit)",
-    "Leds uit bij slaapstand en afsluiten": "Turn off LEDs on sleep and shutdown",
+    "Leds uit bij slaapstand": "Turn off LEDs on sleep",
     "Draait als administrator.": "Running as administrator.",
     "Niet als administrator: CPU-temperatuur en RAM werken alleen als administrator.": "Not running as administrator: CPU temperature and RAM only work as administrator.",
     "Thema": "Theme",
