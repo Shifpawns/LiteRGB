@@ -178,8 +178,9 @@ class KrakenElite(Device):
             if overlay:
                 if time.time() - self.overlay_time > 1.0:
                     sensors = engine.sensors
-                    self.overlay = lcd.sensor_overlay(self.size, self.status.get("liquid"), sensors.cpu_temp,
-                                                      sensors.cpu_load, settings.get("accent", "#00a2ff"),
+                    self.overlay = lcd.sensor_overlay(self.size, sensors.values(self.status.get("liquid")),
+                                                      settings.get("accent", "#00a2ff"),
+                                                      settings.get("overlay_style", "bar"),
                                                       settings.get("overlay_position", "bottom"))
                     self.overlay_time = time.time()
                 frame = lcd.encode(lcd.compose(frame, self.overlay, rotation), fmt)
@@ -191,8 +192,8 @@ class KrakenElite(Device):
             return
 
         sensors = engine.sensors
-        image = lcd.sensor_frame(self.size, rotation, self.status.get("liquid"),
-                                 sensors.cpu_temp, sensors.cpu_load, settings.get("accent", "#00a2ff"))
+        image = lcd.sensor_frame(self.size, rotation, sensors.values(self.status.get("liquid")),
+                                 settings.get("accent", "#00a2ff"))
         self.wait_and_push(lcd.encode(image, fmt), fmt, 1.0)
 
     def wait_and_push(self, data, fmt, duration):

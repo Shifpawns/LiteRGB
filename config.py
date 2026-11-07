@@ -27,6 +27,7 @@ DEFAULTS = {
         "offset_y": 0.0,
         "overlay_sensors": False,
         "overlay_position": "bottom",
+        "overlay_style": "bar",
     },
     "lianli_fans_per_channel": [4, 4, 4, 4],
     "nzxt_leds_per_channel": [40, 40, 40],

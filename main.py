@@ -29,7 +29,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.27"
+VERSION = "1.28"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
@@ -322,7 +322,7 @@ class App:
         lcd = self.config["lcd"]
 
         self.lcd_mode = tk.StringVar(value=lcd["mode"])
-        modes = [(T("Sensoren (vloeistof + CPU)"), "sensors"), (T("Afbeelding / GIF"), "image"),
+        modes = [(T("Sensoren (vloeistof, CPU, GPU)"), "sensors"), (T("Afbeelding / GIF"), "image"),
                  (T("Standaard NZXT-scherm"), "liquid")]
         for row, (text, value) in enumerate(modes):
             ttk.Radiobutton(tab, text=text, value=value, variable=self.lcd_mode,
@@ -368,13 +368,22 @@ class App:
         self.overlay_var = tk.BooleanVar(value=lcd.get("overlay_sensors", False))
         ttk.Checkbutton(overlay_row, text=T("Sensoren over afbeelding/GIF tonen"), variable=self.overlay_var,
                         command=self.apply_lcd).pack(side="left")
+        styles = {"bar": T("Balk"), "gauge": T("Meter"), "dual": T("Dubbel"), "minimal": T("Minimaal")}
+        self.overlay_style = tk.StringVar(value=styles.get(lcd.get("overlay_style", "bar"), styles["bar"]))
+        style_box = ttk.Combobox(overlay_row, textvariable=self.overlay_style, values=list(styles.values()),
+                                 state="readonly", width=9)
+        style_box.pack(side="left", padx=(8, 0))
+        style_box.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
+        self.overlay_styles = styles
         positions = {"bottom": T("Onder"), "top": T("Boven")}
         self.overlay_position = tk.StringVar(value=positions.get(lcd.get("overlay_position", "bottom")))
-        position_box = ttk.Combobox(overlay_row, textvariable=self.overlay_position, values=list(positions.values()),
-                                    state="readonly", width=7)
-        position_box.pack(side="left", padx=8)
-        position_box.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
+        self.position_box = ttk.Combobox(overlay_row, textvariable=self.overlay_position,
+                                         values=list(positions.values()), state="readonly", width=7)
+        self.position_box.pack(side="left", padx=8)
+        self.position_box.bind("<<ComboboxSelected>>", lambda e: self.apply_lcd())
         self.overlay_positions = positions
+        if lcd.get("overlay_style", "bar") not in ("bar", "minimal"):
+            self.position_box.state(["disabled"])
 
         self.cpu_label = ttk.Label(tab, foreground=theme.MUTED, wraplength=430, justify="left")
         self.cpu_label.grid(row=10, column=0, columnspan=3, sticky="w", pady=(12, 0))
@@ -421,12 +430,11 @@ class App:
         if mode == "image" and frame is not None:
             image = lcd_render.fit(frame, PREVIEW, rotation, self.zoom_var.get(), self.offset_x, self.offset_y)
             if self.overlay_var.get():
-                overlay = lcd_render.sensor_overlay(PREVIEW, 31.4, self.sensors.cpu_temp, self.sensors.cpu_load,
-                                                    self.accent.value, self.overlay_position_code())
+                overlay = lcd_render.sensor_overlay(PREVIEW, self.sensors.values(31.4), self.accent.value,
+                                                    self.overlay_style_code(), self.overlay_position_code())
                 image = lcd_render.compose(image, overlay, 0)
         elif mode == "sensors":
-            image = lcd_render.sensor_frame(PREVIEW, rotation, 31.4, self.sensors.cpu_temp,
-                                            self.sensors.cpu_load, self.accent.value)
+            image = lcd_render.sensor_frame(PREVIEW, rotation, self.sensors.values(31.4), self.accent.value)
         else:
             image = Image.new("RGB", (PREVIEW, PREVIEW), (11, 13, 16))
         mask = Image.new("L", (PREVIEW, PREVIEW), 70)
@@ -933,6 +941,9 @@ class App:
             self.lcd_mode.set("image")
             self.apply_lcd()
 
+    def overlay_style_code(self):
+        return next((k for k, v in self.overlay_styles.items() if v == self.overlay_style.get()), "bar")
+
     def overlay_position_code(self):
         return next((k for k, v in self.overlay_positions.items() if v == self.overlay_position.get()), "bottom")
 
@@ -949,6 +960,8 @@ class App:
         lcd["offset_y"] = round(self.offset_y, 3)
         lcd["overlay_sensors"] = self.overlay_var.get()
         lcd["overlay_position"] = self.overlay_position_code()
+        lcd["overlay_style"] = self.overlay_style_code()
+        self.position_box.state(["!disabled"] if lcd["overlay_style"] in ("bar", "minimal") else ["disabled"])
         self.save()
         self.draw_preview()
 
@@ -1004,6 +1017,7 @@ class App:
         self.offset_y = lcd.get("offset_y", 0.0)
         self.overlay_var.set(lcd.get("overlay_sensors", False))
         self.overlay_position.set(self.overlay_positions.get(lcd.get("overlay_position", "bottom")))
+        self.overlay_style.set(self.overlay_styles.get(lcd.get("overlay_style", "bar"), self.overlay_styles["bar"]))
         self.draw_preview()
         self.load_selection()
 

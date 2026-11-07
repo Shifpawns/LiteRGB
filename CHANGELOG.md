@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28
+- Choose a style for the sensors over your image or GIF on the Kraken LCD: Bar, Gauge, Dual or Minimal.
+- GPU temperature and load are shown on the Kraken LCD when available (NVIDIA, AMD or Intel).
+
 ## 1.27
 - LEDs always turn off when Windows shuts down. The setting now only applies to sleep.
 

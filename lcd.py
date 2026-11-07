@@ -92,36 +92,70 @@ def hex_to_rgb(value):
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def sensor_frame(size, rotation, liquid, cpu_temp, cpu_load, accent):
-    accent = hex_to_rgb(accent)
-    image = Image.new("RGB", (size, size), (8, 10, 14))
-    draw = ImageDraw.Draw(image)
+GPU_COLOR = (120, 220, 120)
+CPU_COLOR = (255, 140, 60)
+WHITE = (245, 247, 250, 255)
+DIM = (215, 220, 228, 255)
+TRACK = (20, 22, 28, 200)
 
+
+def temp(value, digits=0):
+    return f"{value:.{digits}f}°" if value is not None else "--"
+
+
+def detail_lines(values):
+    lines = []
+    for name in ("cpu", "gpu"):
+        parts = []
+        if values.get(f"{name}_temp") is not None:
+            parts.append(temp(values[f"{name}_temp"]))
+        if values.get(f"{name}_load") is not None:
+            parts.append(f"{values[f'{name}_load']:.0f}%")
+        if parts and (name == "cpu" or values.get("gpu_temp") is not None):
+            lines.append(name.upper() + "  " + "  ·  ".join(parts))
+    return lines
+
+
+def columns(values, accent):
+    result = [(t("VLOEISTOF"), temp(values.get("liquid"), 1), accent)]
+    if values.get("cpu_temp") is not None or values.get("cpu_load") is not None:
+        result.append(("CPU", temp(values.get("cpu_temp")), CPU_COLOR))
+    if values.get("gpu_temp") is not None:
+        result.append(("GPU", temp(values.get("gpu_temp")), GPU_COLOR))
+    return result
+
+
+def share(value, low, high):
+    if value is None:
+        return 0.0
+    return max(0.0, min(1.0, (value - low) / (high - low)))
+
+
+def draw_gauge(draw, size, values, accent, background):
     margin = size * 0.06
     width = max(4, int(size * 0.045))
     box = [margin, margin, size - margin, size - margin]
-    draw.arc(box, 135, 405, fill=(38, 42, 50), width=width)
-    if liquid is not None:
-        share = max(0.0, min(1.0, (liquid - 20) / 40))
-        if share > 0:
-            draw.arc(box, 135, 135 + 270 * share, fill=accent, width=width)
+    draw.arc(box, 135, 405, fill=background, width=width)
+    part = share(values.get("liquid"), 20, 60)
+    if part > 0:
+        draw.arc(box, 135, 135 + 270 * part, fill=accent, width=width)
 
+    lines = detail_lines(values)
     center = size / 2
-    value = f"{liquid:.1f}°" if liquid is not None else "--"
-    draw.text((center, center - size * 0.02), value, font=font(int(size * 0.2), True),
-              fill=(240, 242, 245), anchor="mm")
-    draw.text((center, center - size * 0.2), t("VLOEISTOF"), font=font(int(size * 0.055)),
+    lift = size * 0.04 if len(lines) > 1 else 0
+    draw.text((center, center - size * 0.02 - lift), temp(values.get("liquid"), 1), font=font(int(size * 0.2), True),
+              fill=WHITE, anchor="mm")
+    draw.text((center, center - size * 0.2 - lift), t("VLOEISTOF"), font=font(int(size * 0.055)),
               fill=accent, anchor="mm")
+    small = font(int(size * 0.062 if len(lines) > 1 else size * 0.07))
+    for i, line in enumerate(lines):
+        draw.text((center, center + size * 0.16 - lift + i * size * 0.085), line, font=small, fill=DIM, anchor="mm")
 
-    parts = []
-    if cpu_temp is not None:
-        parts.append(f"{cpu_temp:.0f}°")
-    if cpu_load is not None:
-        parts.append(f"{cpu_load:.0f}%")
-    if parts:
-        draw.text((center, center + size * 0.18), "CPU  " + "  ·  ".join(parts),
-                  font=font(int(size * 0.07)), fill=(170, 176, 186), anchor="mm")
 
+def sensor_frame(size, rotation, values, accent):
+    accent = hex_to_rgb(accent)
+    image = Image.new("RGB", (size, size), (8, 10, 14))
+    draw_gauge(ImageDraw.Draw(image), size, values, accent, (38, 42, 50))
     if rotation:
         image = image.rotate(-rotation)
     return image
@@ -136,50 +170,30 @@ def load_frames(path, size, zoom=1.0, dx=0.0, dy=0.0):
     return frames
 
 
-def sensor_overlay(size, liquid, cpu_temp, cpu_load, accent, position="bottom"):
-    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-    accent = hex_to_rgb(accent)
-
-    parts = [f"{liquid:.1f}°" if liquid is not None else "--"]
-    cpu = []
-    if cpu_temp is not None:
-        cpu.append(f"{cpu_temp:.0f}°")
-    if cpu_load is not None:
-        cpu.append(f"{cpu_load:.0f}%")
-
-    big = font(int(size * 0.085), True)
-    small = font(int(size * 0.055))
-    label = font(int(size * 0.035), True)
-    width = size * 0.64
-    height = size * 0.17
+def draw_columns(draw, size, items, top, height, width):
     left = (size - width) / 2
+    draw.rounded_rectangle([left, top, left + width, top + height], radius=height * 0.4, fill=(8, 10, 14, 185))
+    label = font(int(size * 0.035), True)
+    value = font(int(size * (0.07 if len(items) > 2 else 0.075)), True)
+    step = width / len(items)
+    for i, (name, text, color) in enumerate(items):
+        x = left + step * (i + 0.5)
+        draw.text((x, top + height * 0.28), name, font=label, fill=color + (255,), anchor="mm")
+        draw.text((x, top + height * 0.65), text, font=value, fill=WHITE, anchor="mm")
+        if i:
+            line_x = left + step * i
+            draw.line([line_x, top + height * 0.22, line_x, top + height * 0.78], fill=(255, 255, 255, 60),
+                      width=max(1, size // 320))
+
+
+def bar_overlay(size, values, accent, position):
+    overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    items = columns(values, accent)
+    width = size * (0.36 + 0.14 * len(items))
+    height = size * 0.17
     top = size * 0.12 if position == "top" else size * 0.71
-    draw.rounded_rectangle([left, top, left + width, top + height], radius=height / 2, fill=(8, 10, 14, 175))
-
-    center = size / 2
-    if cpu:
-        liquid_x = center - width * 0.24
-        cpu_x = center + width * 0.22
-        draw.line([center, top + height * 0.22, center, top + height * 0.78], fill=(255, 255, 255, 60),
-                  width=max(1, size // 320))
-        draw.text((cpu_x, top + height * 0.3), "CPU", font=label, fill=accent + (255,), anchor="mm")
-        draw.text((cpu_x, top + height * 0.66), "  ".join(cpu), font=small, fill=(235, 238, 242, 255), anchor="mm")
-    else:
-        liquid_x = center
-    draw.text((liquid_x, top + height * 0.3), t("VLOEISTOF"), font=label, fill=accent + (255,), anchor="mm")
-    draw.text((liquid_x, top + height * 0.66), parts[0], font=small if cpu else big,
-              fill=(245, 247, 250, 255), anchor="mm")
+    draw_columns(ImageDraw.Draw(overlay), size, items, top, height, width)
     return overlay
-
-
-def cpu_parts(cpu_temp, cpu_load):
-    parts = []
-    if cpu_temp is not None:
-        parts.append(f"{cpu_temp:.0f}°")
-    if cpu_load is not None:
-        parts.append(f"{cpu_load:.0f}%")
-    return parts
 
 
 def radial_shade(size, radius, alpha):
@@ -192,68 +206,38 @@ def radial_shade(size, radius, alpha):
     return shade
 
 
-def gauge_overlay(size, liquid, cpu_temp, cpu_load, accent):
-    overlay = radial_shade(size, size * 0.34, 170)
-    draw = ImageDraw.Draw(overlay)
-    accent = hex_to_rgb(accent)
-    margin = size * 0.06
-    width = max(4, int(size * 0.045))
-    box = [margin, margin, size - margin, size - margin]
-    draw.arc(box, 135, 405, fill=(20, 22, 28, 200), width=width)
-    if liquid is not None:
-        share = max(0.0, min(1.0, (liquid - 20) / 40))
-        if share > 0:
-            draw.arc(box, 135, 135 + 270 * share, fill=accent + (255,), width=width)
-    center = size / 2
-    value = f"{liquid:.1f}°" if liquid is not None else "--"
-    draw.text((center, center - size * 0.02), value, font=font(int(size * 0.2), True),
-              fill=(245, 247, 250, 255), anchor="mm")
-    draw.text((center, center - size * 0.2), t("VLOEISTOF"), font=font(int(size * 0.055)),
-              fill=accent + (255,), anchor="mm")
-    parts = cpu_parts(cpu_temp, cpu_load)
-    if parts:
-        draw.text((center, center + size * 0.18), "CPU  " + "  ·  ".join(parts),
-                  font=font(int(size * 0.07)), fill=(215, 220, 228, 255), anchor="mm")
+def gauge_overlay(size, values, accent):
+    overlay = radial_shade(size, size * 0.36, 170)
+    draw_gauge(ImageDraw.Draw(overlay), size, values, accent + (255,), TRACK)
     return overlay
 
 
-def dual_overlay(size, liquid, cpu_temp, cpu_load, accent):
+def dual_overlay(size, values, accent):
     overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
-    accent = hex_to_rgb(accent)
-    second = (255, 140, 60)
     margin = size * 0.05
     width = max(4, int(size * 0.04))
     box = [margin, margin, size - margin, size - margin]
-    draw.arc(box, 100, 260, fill=(20, 22, 28, 200), width=width)
-    draw.arc(box, 280, 440, fill=(20, 22, 28, 200), width=width)
-    if liquid is not None:
-        share = max(0.0, min(1.0, (liquid - 20) / 40))
-        draw.arc(box, 100, 100 + 160 * share, fill=accent + (255,), width=width)
-    if cpu_temp is not None:
-        share = max(0.0, min(1.0, (cpu_temp - 20) / 80))
-        draw.arc(box, 440 - 160 * share, 440, fill=second + (255,), width=width)
+    draw.arc(box, 100, 260, fill=TRACK, width=width)
+    draw.arc(box, 280, 440, fill=TRACK, width=width)
+    left = share(values.get("liquid"), 20, 60)
+    if left:
+        draw.arc(box, 100, 100 + 160 * left, fill=accent + (255,), width=width)
+    right_value, right_color = values.get("cpu_temp"), CPU_COLOR
+    if values.get("gpu_temp") is not None and right_value is None:
+        right_value, right_color = values.get("gpu_temp"), GPU_COLOR
+    right = share(right_value, 20, 100)
+    if right:
+        draw.arc(box, 440 - 160 * right, 440, fill=right_color + (255,), width=width)
 
-    top = size * 0.68
-    height = size * 0.2
-    draw.rounded_rectangle([size * 0.2, top, size * 0.8, top + height], radius=height * 0.35,
-                           fill=(8, 10, 14, 185))
-    left_x = size * 0.35
-    right_x = size * 0.65
-    label = font(int(size * 0.035), True)
-    value = font(int(size * 0.075), True)
-    draw.text((left_x, top + height * 0.27), t("VLOEISTOF"), font=label, fill=accent + (255,), anchor="mm")
-    draw.text((left_x, top + height * 0.64), f"{liquid:.0f}°" if liquid is not None else "--", font=value,
-              fill=(245, 247, 250, 255), anchor="mm")
-    draw.text((right_x, top + height * 0.27), "CPU", font=label, fill=second + (255,), anchor="mm")
-    draw.text((right_x, top + height * 0.64), f"{cpu_temp:.0f}°" if cpu_temp is not None else "--", font=value,
-              fill=(245, 247, 250, 255), anchor="mm")
-    draw.line([size / 2, top + height * 0.2, size / 2, top + height * 0.8], fill=(255, 255, 255, 60),
-              width=max(1, size // 320))
+    items = columns(values, accent)
+    if len(items) > 1:
+        items[0] = (items[0][0], temp(values.get("liquid")), items[0][2])
+    draw_columns(draw, size, items, size * 0.68, size * 0.2, size * (0.3 + 0.15 * len(items)))
     return overlay
 
 
-def minimal_overlay(size, liquid, cpu_temp, cpu_load, accent, position="bottom"):
+def minimal_overlay(size, values, accent, position):
     fade = Image.new("L", (1, 256))
     for y in range(256):
         fade.putpixel((0, y), int(235 * min(1, max(0, (y - 110) / 100)) ** 1.2))
@@ -263,28 +247,32 @@ def minimal_overlay(size, liquid, cpu_temp, cpu_load, accent, position="bottom")
     overlay = Image.new("RGBA", (size, size), (4, 5, 8, 0))
     overlay.putalpha(fade)
     draw = ImageDraw.Draw(overlay)
-    accent = hex_to_rgb(accent)
     center = size / 2
     y = size * 0.24 if position == "top" else size * 0.76
-    value = f"{liquid:.1f}°" if liquid is not None else "--"
-    draw.text((center, y), value, font=font(int(size * 0.12), True), fill=(250, 250, 252, 255), anchor="mm",
-              stroke_width=max(1, size // 200), stroke_fill=(0, 0, 0, 120))
-    parts = cpu_parts(cpu_temp, cpu_load)
+    draw.text((center, y), temp(values.get("liquid"), 1), font=font(int(size * 0.12), True), fill=WHITE,
+              anchor="mm", stroke_width=max(1, size // 200), stroke_fill=(0, 0, 0, 120))
+    parts = [f"{name} {text}" for name, text, _ in columns(values, accent)[1:]]
+    if values.get("gpu_temp") is None and values.get("cpu_load") is not None and parts:
+        parts[0] += f"  {values['cpu_load']:.0f}%"
     if parts:
         offset = -size * 0.1 if position == "top" else size * 0.095
-        draw.text((center, y + offset), "CPU " + "  ".join(parts), font=font(int(size * 0.05), True),
+        draw.text((center, y + offset), "   ".join(parts), font=font(int(size * 0.05), True),
                   fill=accent + (255,), anchor="mm")
     return overlay
 
 
-def overlay_style(style, size, liquid, cpu_temp, cpu_load, accent, position="bottom"):
+STYLES = ["bar", "gauge", "dual", "minimal"]
+
+
+def sensor_overlay(size, values, accent, style="bar", position="bottom"):
+    accent = hex_to_rgb(accent)
     if style == "gauge":
-        return gauge_overlay(size, liquid, cpu_temp, cpu_load, accent)
+        return gauge_overlay(size, values, accent)
     if style == "dual":
-        return dual_overlay(size, liquid, cpu_temp, cpu_load, accent)
+        return dual_overlay(size, values, accent)
     if style == "minimal":
-        return minimal_overlay(size, liquid, cpu_temp, cpu_load, accent, position)
-    return sensor_overlay(size, liquid, cpu_temp, cpu_load, accent, position)
+        return minimal_overlay(size, values, accent, position)
+    return bar_overlay(size, values, accent, position)
 
 
 def compose(frame, overlay, rotation):
