@@ -89,5 +89,8 @@ class MsiMysticLight162(Device):
         self.last_colors = None
         return "opgeslagen"
 
+    def blackout(self):
+        self.save_to_device({"type": "off"}, None, 0)
+
     def close(self):
         self.dev.close()

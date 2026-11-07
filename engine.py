@@ -55,10 +55,8 @@ class Engine:
 
     def do_blackout(self):
         for key, device in list(self.devices.items()):
-            if not device.positions:
-                continue
             try:
-                device.send([(0, 0, 0)] * len(device.positions))
+                device.blackout()
             except Exception as error:
                 logging.info("Blackout failed for %s: %s", key, error)
         self.paused = True

@@ -92,6 +92,10 @@ class Device:
     def save_to_device(self, effect, colors, brightness):
         return None
 
+    def blackout(self):
+        if self.positions:
+            self.send([(0, 0, 0)] * len(self.positions))
+
     def apply_effect(self, effect, brightness):
         pass
 
