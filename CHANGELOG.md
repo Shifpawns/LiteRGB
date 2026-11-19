@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.29
+- Faster startup with Windows when starting as administrator.
+
 ## 1.28
 - Choose a style for the sensors over your image or GIF on the Kraken LCD: Bar, Gauge, Dual or Minimal.
 - GPU temperature and load are shown on the Kraken LCD when available (NVIDIA, AMD or Intel).

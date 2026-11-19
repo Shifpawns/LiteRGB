@@ -1,3 +1,10 @@
+import sys
+
+if __name__ == "__main__" and "--launch-task" in sys.argv:
+    import autostart
+    if not autostart.is_admin() and autostart.launch_task():
+        sys.exit(0)
+
 import ctypes
 import logging
 import os
@@ -29,7 +36,7 @@ from sensors import Sensors
 APP = "LiteRGB"
 PREVIEW = 220
 AJAZZ_PREVIEW = 192
-VERSION = "1.28"
+VERSION = "1.29"
 CONFLICTS = {
     "SignalRgb.exe": "SignalRGB",
     "NZXT CAM.exe": "NZXT CAM",
